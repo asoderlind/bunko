@@ -7,8 +7,14 @@ ALLOWED = {"trading", "economics", "cooking"}
 
 def test_unknown_slugs_are_dropped_silently():
     tags, none_apply, title = parse_tag_response(
-        {"tags": [{"slug": "trading", "confidence": 0.9}, {"slug": "invented", "confidence": 0.5}],
-         "none_apply": False, "title": "Markets"},
+        {
+            "tags": [
+                {"slug": "trading", "confidence": 0.9},
+                {"slug": "invented", "confidence": 0.5},
+            ],
+            "none_apply": False,
+            "title": "Markets",
+        },
         ALLOWED,
     )
     assert [t["slug"] for t in tags] == ["trading"]

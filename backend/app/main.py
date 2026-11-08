@@ -9,7 +9,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import auth_routes, notes, providers, tags
+from app.api import auth_routes, folders, notes, providers, tags
 from app.config import get_settings
 from app.db import SessionLocal
 from app.security_headers import SecurityHeadersMiddleware
@@ -78,7 +78,13 @@ def ready() -> JSONResponse:
     return JSONResponse({"status": True, "database": True})
 
 
-for _router in (auth_routes.router, notes.router, tags.router, providers.router):
+for _router in (
+    auth_routes.router,
+    notes.router,
+    tags.router,
+    providers.router,
+    folders.router,
+):
     app.include_router(_router, prefix="/api")
 
 # The SPA catch-all goes last, and explicitly refuses to answer for API or

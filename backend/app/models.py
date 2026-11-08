@@ -90,6 +90,32 @@ class Tag(Base):
         return f"<Tag {self.slug}>"
 
 
+class Folder(Base):
+    """A user-made container for notes. One level of nesting via parent_id."""
+
+    __tablename__ = "notes_folder"
+
+    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(100))
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("notes_folder.id", ondelete="CASCADE"), nullable=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    collapsed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, server_default=func.now()
+    )
+
+    notes: Mapped[list[Note]] = relationship(back_populates="folder")
+    children: Mapped[list[Folder]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan"
+    )
+    parent: Mapped[Folder | None] = relationship(back_populates="children", remote_side="Folder.id")
+
+    def __repr__(self) -> str:
+        return f"<Folder {self.name}>"
+
+
 class Note(Base):
     __tablename__ = "notes_note"
 
@@ -105,6 +131,11 @@ class Note(Base):
 
     tag_error: Mapped[str] = mapped_column(String(200), default="")
 
+    # Notes survive folder deletion; they fall back to "unfiled".
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("notes_folder.id", ondelete="SET NULL"), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, server_default=func.now()
     )
@@ -115,6 +146,7 @@ class Note(Base):
     note_tags: Mapped[list[NoteTag]] = relationship(
         back_populates="note", cascade="all, delete-orphan"
     )
+    folder: Mapped[Folder | None] = relationship(back_populates="notes")
 
     __table_args__ = (Index("notes_note_status_updated_idx", "tag_status", "updated_at"),)
 

@@ -1,4 +1,4 @@
-import { api, type Note, type Tag, type TagsResponse, type User } from "./api";
+import { api, type Folder, type Note, type Tag, type TagsResponse, type User } from "./api";
 
 /**
  * Small reactive data layer built on Svelte 5 runes.
@@ -57,6 +57,7 @@ class AuthStore {
       this.user = null;
       notes.reset();
       tags.reset();
+      folders.reset();
     }
   }
 }
@@ -90,9 +91,43 @@ class TagsStore {
 
 export const tags = new TagsStore();
 
+// --- folders --------------------------------------------------------------
+
+class FoldersStore {
+  items = $state<Folder[]>([]);
+  loaded = $state(false);
+
+  async load() {
+    try {
+      this.items = await api.listFolders();
+    } finally {
+      this.loaded = true;
+    }
+  }
+
+  reset() {
+    this.items = [];
+    this.loaded = false;
+  }
+
+  get tree() {
+    const roots = this.items
+      .filter((f) => !f.parent_id)
+      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+    return roots.map((r) => ({
+      ...r,
+      children: this.items
+        .filter((f) => f.parent_id === r.id)
+        .sort((a, b) => a.position - b.position),
+    }));
+  }
+}
+
+export const folders = new FoldersStore();
+
 // --- note lists -----------------------------------------------------------
 
-type ListFilter = { q?: string; tag?: string[]; tag_status?: string };
+type ListFilter = { q?: string; tag?: string[]; tag_status?: string; folder?: string };
 
 class NotesStore {
   items = $state<Note[]>([]);

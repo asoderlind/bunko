@@ -54,6 +54,7 @@ def _note_out(note: Note) -> NoteOut:
         tag_status=note.tag_status,
         tag_error=note.tag_error,
         local_only=note.local_only,
+        folder_id=note.folder_id,
         created_at=note.created_at,
         updated_at=note.updated_at,
     )
@@ -84,6 +85,7 @@ def list_notes(
     q: str | None = None,
     tag: Annotated[list[str] | None, Query()] = None,
     tag_status: str | None = None,
+    folder: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> Page[NoteOut]:
@@ -98,6 +100,15 @@ def list_notes(
 
     if tag_status:
         stmt = stmt.where(Note.tag_status == tag_status)
+
+    # folder=unfiled returns notes with no folder; otherwise match the id.
+    if folder == "unfiled":
+        stmt = stmt.where(Note.folder_id.is_(None))
+    elif folder:
+        try:
+            stmt = stmt.where(Note.folder_id == uuid.UUID(folder))
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid folder id.") from None
 
     if q:
         # Simple ILIKE across body and title. Replaces Postgres FTS; for a
@@ -129,6 +140,7 @@ def create_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut
     note = Note(
         body_md=payload.body_md,
         local_only=payload.local_only,
+        folder_id=payload.folder_id,
         tag_status=TagStatus.PENDING,
     )
     if payload.title is not None and payload.title.strip():
@@ -161,6 +173,9 @@ def update_note(
 
     if "local_only" in data:
         note.local_only = bool(data["local_only"])
+
+    if "folder_id" in data:
+        note.folder_id = data["folder_id"]
 
     if "title" in data:
         new_title = (data["title"] or "").strip()

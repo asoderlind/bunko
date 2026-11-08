@@ -60,6 +60,29 @@ class NoteTagOut(BaseModel):
     confidence: float | None
 
 
+class FolderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    parent_id: uuid.UUID | None
+    position: int
+    collapsed: bool
+    note_count: int = 0
+
+
+class FolderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    parent_id: uuid.UUID | None = None
+
+
+class FolderPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    parent_id: uuid.UUID | None = None
+    position: int | None = None
+    collapsed: bool | None = None
+
+
 class NoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +94,7 @@ class NoteOut(BaseModel):
     tag_status: str
     tag_error: str
     local_only: bool
+    folder_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -79,12 +103,14 @@ class NoteIn(BaseModel):
     body_md: str
     title: str | None = None
     local_only: bool = False
+    folder_id: uuid.UUID | None = None
 
 
 class NotePatch(BaseModel):
     body_md: str | None = None
     title: str | None = None
     local_only: bool | None = None
+    folder_id: uuid.UUID | None = None
 
 
 class TagsResponse(BaseModel):

@@ -1,13 +1,33 @@
 <script lang="ts">
   import Sidebar from "./Sidebar.svelte";
   import { page } from "$app/stores";
-  import { Menu, Search, X } from "lucide-svelte";
+  import {
+    Menu,
+    PanelLeftClose,
+    PanelLeftOpen,
+    Search,
+    X,
+  } from "lucide-svelte";
 
   let { children } = $props();
 
+  // Desktop: the rail can be collapsed to give the note full width.
+  let collapsed = $state(false);
+  // Mobile: the sidebar is an overlay drawer.
   let drawer = $state(false);
   let searching = $state(false);
   let searchInput = $state<HTMLInputElement | null>(null);
+  let q = $state("");
+
+  // Persist the desktop preference across reloads.
+  if (typeof localStorage !== "undefined") {
+    collapsed = localStorage.getItem("easy-notes.sidebar-collapsed") === "1";
+  }
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("easy-notes.sidebar-collapsed", collapsed ? "1" : "0");
+    }
+  });
 
   // Close the drawer whenever the route changes.
   $effect(() => {
@@ -42,8 +62,6 @@
     if (searching) searchInput?.focus();
   });
 
-  let q = $state("");
-
   function submitSearch(e: SubmitEvent) {
     e.preventDefault();
     if (!q.trim()) return;
@@ -53,10 +71,18 @@
 </script>
 
 <div class="flex min-h-dvh">
-  <!-- Desktop rail -->
-  <aside class="hidden w-56 shrink-0 border-r bg-card/40 md:block">
-    <div class="sticky top-0 h-dvh">
-      <Sidebar />
+  <!-- Desktop rail, collapsible -->
+  <aside
+    class="hidden shrink-0 border-r bg-card/40 transition-[width] duration-200 md:block"
+    class:md:w-56={!collapsed}
+    class:md:w-0={collapsed}
+    class:md:border-r-0={collapsed}
+    aria-hidden={collapsed}
+  >
+    <div class="sticky top-0 h-dvh overflow-hidden">
+      <div class="h-full w-56">
+        <Sidebar />
+      </div>
     </div>
   </aside>
 
@@ -80,6 +106,7 @@
     <header
       class="sticky top-0 z-30 flex items-center gap-1 border-b bg-background/95 px-2 py-1.5 backdrop-blur"
     >
+      <!-- Mobile: open the drawer -->
       <button
         class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
         onclick={() => (drawer = true)}
@@ -87,6 +114,22 @@
       >
         <Menu class="h-5 w-5" />
       </button>
+
+      <!-- Desktop: collapse/expand the rail -->
+      <button
+        class="hidden h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:inline-flex"
+        onclick={() => (collapsed = !collapsed)}
+        aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
+        aria-pressed={!collapsed}
+        title={collapsed ? "Show sidebar" : "Hide sidebar"}
+      >
+        {#if collapsed}
+          <PanelLeftOpen class="h-5 w-5" />
+        {:else}
+          <PanelLeftClose class="h-5 w-5" />
+        {/if}
+      </button>
+
       <span class="px-2 text-sm font-semibold tracking-tight md:hidden">easy-notes</span>
       <div class="ml-auto">
         <button

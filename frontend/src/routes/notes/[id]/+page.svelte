@@ -5,7 +5,7 @@
   import { Loader2, Plus } from "lucide-svelte";
   import { DropdownMenu } from "bits-ui";
   import { api, ApiError } from "$lib/api";
-  import { createNoteStore, notes, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { createNoteStore, folders, notes, sidebarNotes, tags } from "$lib/stores.svelte";
   import { tagStyle } from "$lib/tag-colors";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
@@ -22,9 +22,16 @@
   let renameOpen = $state(false);
 
   onMount(() => {
-    void store.load(id);
     if (!tags.loaded) void tags.load();
+    if (!folders.loaded) void folders.load();
     return () => store.dispose();
+  });
+
+  // onMount fires once, so clicking another note in the sidebar changed the
+  // URL without refetching. Track the route id instead.
+  $effect(() => {
+    const current = id;
+    if (current) void store.load(current);
   });
 
   // Reset the editor when the route changes to a different note.
@@ -62,6 +69,18 @@
     } finally {
       saving = false;
     }
+  }
+
+  async function moveToFolder(folderId: string) {
+    const current = store.note;
+    if (!current) return;
+    const updated = await api.updateNote(current.id, {
+      folder_id: folderId || null,
+    });
+    store.setNote(updated);
+    notes.patch(updated.id, (n) => ({ ...n, folder_id: updated.folder_id }));
+    sidebarNotes.patch(updated.id, (n) => ({ ...n, folder_id: updated.folder_id }));
+    void folders.load();
   }
 
   async function addTag(slug: string) {
@@ -149,16 +168,30 @@
         {/if}
       </div>
 
-      <NoteActions
-        note={n}
-        align="end"
-        class="shrink-0"
+      <div class="flex shrink-0 items-center gap-1">
+        <!-- Folder picker: moving a note never changes its content or tags. -->
+        <select
+          class="h-8 max-w-36 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground"
+          aria-label="Folder"
+          value={n.folder_id ?? ""}
+          onchange={(e) => void moveToFolder(e.currentTarget.value)}
+        >
+          <option value="">No folder</option>
+          {#each folders.items as f (f.id)}
+            <option value={f.id}>{f.name}</option>
+          {/each}
+        </select>
+
+        <NoteActions
+          note={n}
+          align="end"
         onRename={() => (renameOpen = true)}
-        onDeleted={() => {
-          void sidebarNotes.query();
-          void goto("/");
-        }}
-      />
+          onDeleted={() => {
+            void sidebarNotes.query();
+            void goto("/");
+          }}
+        />
+      </div>
     </div>
 
     {#if addError}

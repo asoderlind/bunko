@@ -21,6 +21,7 @@ export type Note = {
   tag_status: TagStatus;
   tag_error: string;
   local_only: boolean;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -37,6 +38,15 @@ export type Tag = {
   name: string;
   description: string;
   color: string;
+  note_count: number;
+};
+
+export type Folder = {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  position: number;
+  collapsed: boolean;
   note_count: number;
 };
 
@@ -108,13 +118,21 @@ export const api = {
   logout: () => request<void>("/auth/logout/", { method: "POST" }),
 
   listNotes: (
-    p: { q?: string; tag?: string[]; tag_status?: string; limit?: number; offset?: number } = {}
+    p: {
+      q?: string;
+      tag?: string[];
+      tag_status?: string;
+      limit?: number;
+      offset?: number;
+      folder?: string;
+    } = {}
   ) => {
     const sp = new URLSearchParams();
     if (p.q) sp.set("q", p.q);
     if (p.tag_status) sp.set("tag_status", p.tag_status);
     if (p.limit) sp.set("limit", String(p.limit));
     if (p.offset) sp.set("offset", String(p.offset));
+    if (p.folder) sp.set("folder", p.folder);
     (p.tag || []).forEach((t) => sp.append("tag", t));
     const qs = sp.toString();
     return request<Page<Note>>(`/notes/${qs ? "?" + qs : ""}`);
@@ -125,7 +143,10 @@ export const api = {
   createNote: (body_md: string, local_only = false) =>
     request<Note>("/notes/", { method: "POST", body: JSON.stringify({ body_md, local_only }) }),
 
-  updateNote: (id: string, patch: Partial<Pick<Note, "body_md" | "title" | "local_only">>) =>
+  updateNote: (
+    id: string,
+    patch: Partial<Pick<Note, "body_md" | "title" | "local_only" | "folder_id">>
+  ) =>
     request<Note>(`/notes/${id}/`, { method: "PATCH", body: JSON.stringify(patch) }),
 
   deleteNote: (id: string) => request<void>(`/notes/${id}/`, { method: "DELETE" }),
@@ -153,6 +174,18 @@ export const api = {
 
   mergeTag: (id: string, merge_into: string) =>
     request<Tag>(`/tags/${id}/merge/`, { method: "POST", body: JSON.stringify({ merge_into }) }),
+
+  listFolders: () => request<Folder[]>("/folders/"),
+
+  createFolder: (data: { name: string; parent_id?: string | null }) =>
+    request<Folder>("/folders/", { method: "POST", body: JSON.stringify(data) }),
+
+  updateFolder: (
+    id: string,
+    data: Partial<{ name: string; parent_id: string | null; position: number; collapsed: boolean }>
+  ) => request<Folder>(`/folders/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  deleteFolder: (id: string) => request<void>(`/folders/${id}/`, { method: "DELETE" }),
 };
 
 export const slugify = (s: string) =>

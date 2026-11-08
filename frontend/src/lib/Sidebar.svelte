@@ -1,10 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import {
     ChevronDown,
+    ChevronRight,
     Filter,
+    Folder as FolderIcon,
+    FolderPlus,
     Inbox,
+    Layers,
     Loader2,
     LogOut,
     NotebookPen,
@@ -12,13 +17,17 @@
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { tagStyle } from "$lib/tag-colors";
-  import { auth, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { api } from "$lib/api";
+  import { auth, folders, sidebarNotes, tags } from "$lib/stores.svelte";
   import TagPill from "./TagPill.svelte";
   import NoteActions from "./NoteActions.svelte";
 
   let { onNavigate }: { onNavigate?: () => void } = $props();
 
   let filterOpen = $state(false);
+  let creatingFolder = $state(false);
+  let newFolderName = $state("");
+  let folderBusy = $state(false);
 
   const NAV = [
     { href: "/", label: "New note", icon: NotebookPen },
@@ -27,6 +36,70 @@
   ];
 
   const selectedTags = $derived($page.url.searchParams.getAll("tag"));
+  const activeFolder = $derived($page.url.searchParams.get("folder"));
+  const hasFilters = $derived(selectedTags.length > 0 || !!activeFolder);
+
+  /** Navigate to the notes list, optionally with filters, without a reload. */
+  function goNotes(params: URLSearchParams) {
+    const qs = params.toString();
+    onNavigate?.();
+    void goto(`/notes${qs ? "?" + qs : ""}`);
+  }
+
+  function buildParams(): URLSearchParams {
+    const next = new URLSearchParams();
+    selectedTags.forEach((t) => next.append("tag", t));
+    if (activeFolder) next.set("folder", activeFolder);
+    return next;
+  }
+
+  function toggleTag(slug: string) {
+    const next = buildParams();
+    const current = next.getAll("tag");
+    next.delete("tag");
+    const updated = current.includes(slug)
+      ? current.filter((s) => s !== slug)
+      : [...current, slug];
+    updated.forEach((s) => next.append("tag", s));
+    goNotes(next);
+  }
+
+  function selectFolder(id: string | null) {
+    const next = buildParams();
+    if (id) next.set("folder", id);
+    else next.delete("folder");
+    goNotes(next);
+  }
+
+  function clearFilters() {
+    const next = new URLSearchParams();
+    if (activeFolder) next.set("folder", activeFolder);
+    goNotes(next);
+  }
+
+  async function createFolder() {
+    const name = newFolderName.trim();
+    if (!name) return;
+    folderBusy = true;
+    try {
+      await api.createFolder({ name });
+      newFolderName = "";
+      creatingFolder = false;
+      await folders.load();
+    } finally {
+      folderBusy = false;
+    }
+  }
+
+  async function toggleCollapse(id: string, collapsed: boolean) {
+    await api.updateFolder(id, { collapsed: !collapsed });
+    await folders.load();
+  }
+
+  function isActive(href: string) {
+    const p = $page.url.pathname;
+    return href === "/" ? p === "/" : p.startsWith(href);
+  }
 
   onMount(() => {
     if (!sidebarNotes.loadedOnce) {
@@ -34,43 +107,21 @@
       void sidebarNotes.query();
     }
     if (!tags.loaded) void tags.load();
+    if (!folders.loaded) void folders.load();
   });
-
-  function toggleTag(slug: string) {
-    const next = new URLSearchParams($page.url.searchParams);
-    const current = next.getAll("tag");
-    next.delete("tag");
-    const updated = current.includes(slug)
-      ? current.filter((s) => s !== slug)
-      : [...current, slug];
-    updated.forEach((s) => next.append("tag", s));
-    onNavigate?.();
-    window.location.href = `/notes?${next.toString()}`;
-  }
-
-  function clearFilters() {
-    window.location.href = "/notes";
-    onNavigate?.();
-  }
-
-  function isActive(href: string) {
-    const p = $page.url.pathname;
-    return href === "/" ? p === "/" : p.startsWith(href);
-  }
 </script>
 
 <!--
-  Structure borrowed from Open WebUI's sidebar: a bounded column with a fixed
-  header, ONE scrollable middle region, and a pinned footer. The tag filter
-  lives inside that scroll region, so expanding it adds scrollable content
-  instead of stealing height from the note list.
+  Bounded column: fixed header, ONE scrollable region (nav + folders + filter +
+  notes), pinned footer. The filter lives inside the scroller so expanding it
+  adds scrollable content instead of squeezing the note list away.
 -->
 <div class="flex h-full flex-col">
   <div class="shrink-0 border-b px-3 py-2">
     <div class="px-1 text-sm font-semibold tracking-tight text-muted-foreground">easy-notes</div>
   </div>
 
-  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+  <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
     <nav class="space-y-1 p-3 pt-2">
       {#each NAV as item (item.href)}
         <a
@@ -88,8 +139,117 @@
         </a>
       {/each}
 
+      <!-- Folders -->
+      <div class="pt-1">
+        <div class="flex items-center justify-between px-2 pb-1">
+          <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+            Folders
+          </span>
+          <button
+            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="New folder"
+            onclick={() => (creatingFolder = !creatingFolder)}
+          >
+            <FolderPlus class="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {#if creatingFolder}
+          <form
+            class="mb-1 px-2"
+            onsubmit={(e) => {
+              e.preventDefault();
+              void createFolder();
+            }}
+          >
+            <input
+              bind:value={newFolderName}
+              placeholder="Folder name"
+              aria-label="Folder name"
+              class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={folderBusy}
+            />
+          </form>
+        {/if}
+
+        <button
+          class={cn(
+            "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors",
+            !activeFolder
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+          )}
+          onclick={() => selectFolder(null)}
+        >
+          <Layers class="h-4 w-4 shrink-0" />
+          All notes
+        </button>
+
+        {#each folders.tree as folder (folder.id)}
+          <div>
+            <div
+              class={cn(
+                "group/folder flex items-center rounded-md transition-colors",
+                activeFolder === folder.id ? "bg-accent" : "hover:bg-accent/50"
+              )}
+            >
+              {#if folder.children.length}
+                <button
+                  class="ml-1 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  aria-label={folder.collapsed ? "Expand" : "Collapse"}
+                  onclick={() => void toggleCollapse(folder.id, folder.collapsed)}
+                >
+                  {#if folder.collapsed}
+                    <ChevronRight class="h-3.5 w-3.5" />
+                  {:else}
+                    <ChevronDown class="h-3.5 w-3.5" />
+                  {/if}
+                </button>
+              {:else}
+                <span class="ml-1 w-6"></span>
+              {/if}
+              <button
+                class={cn(
+                  "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-sm transition-colors",
+                  activeFolder === folder.id
+                    ? "text-accent-foreground"
+                    : "text-muted-foreground group-hover/folder:text-foreground"
+                )}
+                onclick={() => selectFolder(folder.id)}
+              >
+                <FolderIcon class="h-4 w-4 shrink-0" />
+                <span class="truncate">{folder.name}</span>
+                <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
+                  {folder.note_count}
+                </span>
+              </button>
+            </div>
+
+            {#if !folder.collapsed && folder.children.length}
+              {#each folder.children as child (child.id)}
+                <button
+                  class={cn(
+                    "flex min-h-8 w-full items-center gap-2 rounded-md pl-9 pr-2 text-sm transition-colors",
+                    activeFolder === child.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  )}
+                  onclick={() => selectFolder(child.id)}
+                >
+                  <FolderIcon class="h-3.5 w-3.5 shrink-0" />
+                  <span class="truncate">{child.name}</span>
+                  <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
+                    {child.note_count}
+                  </span>
+                </button>
+              {/each}
+            {/if}
+          </div>
+        {/each}
+      </div>
+
       <!-- Tag filter -->
-      <div class="px-1">
+      <div class="px-1 pt-1">
         <button
           class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
           aria-expanded={filterOpen}
@@ -165,7 +325,7 @@
 
     <div class="border-t px-3 pb-2 pt-2">
       <a
-        href="/notes"
+        href={hasFilters ? `/notes?${buildParams().toString()}` : "/notes"}
         onclick={onNavigate}
         class="block px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 hover:text-foreground"
       >
@@ -179,9 +339,7 @@
       {:else}
         <ul class="space-y-px">
           {#each sidebarNotes.items as n (n.id)}
-            <li
-              class="group/row flex items-center rounded-md transition-colors hover:bg-accent/50"
-            >
+            <li class="group/row flex items-center rounded-md transition-colors hover:bg-accent/50">
               <a
                 href={`/notes/${n.id}`}
                 onclick={onNavigate}

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { Loader2 } from "lucide-svelte";
-  import { notes, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { folders, notes, sidebarNotes, tags } from "$lib/stores.svelte";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
   import RenameDialog from "$lib/RenameDialog.svelte";
@@ -15,17 +15,21 @@
 
   const q = $derived($page.url.searchParams.get("q") ?? "");
   const tagFilter = $derived($page.url.searchParams.getAll("tag"));
+  const folderFilter = $derived($page.url.searchParams.get("folder") ?? "");
 
   onMount(() => {
     void tags.load();
   });
 
   // Refetch whenever the filters change.
+  // Reactive on the URL params, so toggling filters feels instant: only the
+  // list refetches, the shell and sidebar stay mounted.
   $effect(() => {
     const filter = {
       q: q || undefined,
       tag: tagFilter.length ? tagFilter : undefined,
       tag_status: inbox ? "done" : undefined,
+      folder: folderFilter || undefined,
     };
     void notes.query(filter);
   });
@@ -33,7 +37,20 @@
   const shown = $derived(
     inbox ? notes.items.filter((n) => n.tags.length === 0) : notes.items
   );
-  const heading = $derived(inbox ? "Needs tags" : q ? `Search: ${q}` : "Notes");
+  const folderName = $derived(
+    folderFilter ? (folders.items.find((f) => f.id === folderFilter)?.name ?? "") : ""
+  );
+  const heading = $derived(
+    inbox
+      ? "Needs tags"
+      : q
+        ? `Search: ${q}`
+        : folderName
+          ? folderName
+          : folderFilter === "unfiled"
+            ? "Unfiled"
+            : "All notes"
+  );
 </script>
 
 <div class="mx-auto w-full max-w-3xl px-4 py-5">

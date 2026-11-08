@@ -50,3 +50,38 @@
     }
   }
 }
+
+@layer components {
+  /*
+   * Thin, dark scrollbars. Default WebKit scrollbars render as a white track
+   * with a light grey thumb on dark backgrounds, which is what made the
+   * sidebar look wrong. Match Open WebUI: near-invisible until hovered.
+   */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.45);
+  }
+
+  /* Opt out entirely, like Open WebUI's .scrollbar-hidden. */
+  .scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
