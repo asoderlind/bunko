@@ -13,12 +13,14 @@
     Loader2,
     LogOut,
     NotebookPen,
+    Search,
     Tag as TagIcon,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { tagStyle } from "$lib/tag-colors";
   import { api } from "$lib/api";
   import { auth, folders, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { search } from "$lib/search.svelte";
   import TagPill from "./TagPill.svelte";
   import NoteActions from "./NoteActions.svelte";
 
@@ -59,6 +61,10 @@
     refreshSidebar();
   }
 
+  /**
+   * Clicking a folder scopes the note list to it (Open WebUI behaviour);
+   * clicking it again clears the scope and shows everything.
+   */
   function selectFolder(id: string | null) {
     activeFolder = activeFolder === id ? null : id;
     refreshSidebar();
@@ -110,8 +116,16 @@
   adds scrollable content instead of squeezing the note list away.
 -->
 <div class="flex h-full flex-col">
-  <div class="shrink-0 border-b px-3 py-2">
-    <div class="px-1 text-sm font-semibold tracking-tight text-muted-foreground">easy-notes</div>
+  <!-- Same height as the shell's bar so the two line up. -->
+  <div class="flex h-14 shrink-0 items-center gap-1 border-b pl-4 pr-2">
+    <div class="text-sm font-semibold tracking-tight text-muted-foreground">easy-notes</div>
+    <button
+      class="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      aria-label="Search"
+      onclick={() => search.show()}
+    >
+      <Search class="h-4 w-4" />
+    </button>
   </div>
 
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -270,8 +284,10 @@
 
     <div class="border-t px-3 pb-2 pt-2">
       <div class="flex items-center justify-between px-2 pb-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-          {#if hasFilters}
+        <span class="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+          {#if activeFolder}
+            {folders.items.find((f) => f.id === activeFolder)?.name ?? "Folder"}
+          {:else if selectedTags.length}
             Filtered
           {:else}
             Recent notes

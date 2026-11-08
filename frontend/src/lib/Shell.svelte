@@ -2,6 +2,7 @@
   import Sidebar from "./Sidebar.svelte";
   import { page } from "$app/stores";
   import { header } from "$lib/header.svelte";
+  import { search } from "$lib/search.svelte";
   import {
     Menu,
     PanelLeftClose,
@@ -16,7 +17,8 @@
   let collapsed = $state(false);
   // Mobile: the sidebar is an overlay drawer.
   let drawer = $state(false);
-  let searching = $state(false);
+  // Search is opened from the sidebar; the field renders under the header.
+  const searching = $derived(search.visible);
   let searchInput = $state<HTMLInputElement | null>(null);
   let q = $state("");
 
@@ -46,12 +48,12 @@
           t.tagName === "TEXTAREA" ||
           t.tagName === "SELECT" ||
           t.isContentEditable);
-      if (e.key === "/" && !typing && !searching) {
+      if (e.key === "/" && !typing && !search.visible) {
         e.preventDefault();
-        searching = true;
+        search.show();
       }
       if (e.key === "Escape") {
-        searching = false;
+        search.hide();
         drawer = false;
       }
     }
@@ -66,7 +68,7 @@
   function submitSearch(e: SubmitEvent) {
     e.preventDefault();
     if (!q.trim()) return;
-    searching = false;
+    search.hide();
     window.location.href = `/notes?q=${encodeURIComponent(q.trim())}`;
   }
 </script>
@@ -146,15 +148,6 @@
         </div>
       {/if}
 
-      <div class="ml-auto flex shrink-0 items-center">
-        <button
-          class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          onclick={() => (searching = true)}
-          aria-label="Search"
-        >
-          <Search class="h-5 w-5" />
-        </button>
-      </div>
     </header>
 
     {#if searching}
@@ -169,12 +162,12 @@
           placeholder="Search notes…"
           aria-label="Search notes"
           class="h-10 flex-1 border-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-          onkeydown={(e) => e.key === "Escape" && (searching = false)}
+          onkeydown={(e) => e.key === "Escape" && search.hide()}
         />
         <button
           type="button"
           class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
-          onclick={() => (searching = false)}
+          onclick={() => search.hide()}
           aria-label="Close search"
         >
           <X class="h-5 w-5" />
