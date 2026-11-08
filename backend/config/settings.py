@@ -109,6 +109,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    # Brute-force guard for the password-only login screen.
+    "DEFAULT_THROTTLE_RATES": {"anon": "20/min"},
 }
 
 # --- easy-notes specific ---------------------------------------------------

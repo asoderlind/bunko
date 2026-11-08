@@ -2,8 +2,10 @@ from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
+from django.contrib.auth.models import User
+from rest_framework.decorators import action, authentication_classes, throttle_classes
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 
 from .models import Note, NoteTag, ProviderProfile, Tag
 from .serializers import (
@@ -165,8 +167,56 @@ class ProviderProfileViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
+from django.contrib.auth import authenticate, login, logout
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+
+
+class CsrfExemptSessionAuth(SessionAuthentication):
+    """Session auth for the login endpoint only.
+
+    The SPA cannot send a CSRF token before it has a session, so login is
+    exempt. Every other endpoint keeps the standard CSRF check.
+    """
+
+    def enforce_csrf(self, request):
+        return
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([CsrfExemptSessionAuth])
+@throttle_classes([AnonRateThrottle])
+def login_view(request):
+    """Password-only sign in: one user, so no username is required."""
+    password = (request.data or {}).get("password") or ""
+    username = (request.data or {}).get("username") or ""
+
+    user = None
+    if username:
+        user = authenticate(request, username=username, password=password)
+    else:
+        # Single-user app: try the sole active superuser.
+        for candidate in User.objects.filter(is_active=True, is_superuser=True):
+            user = authenticate(request, username=candidate.username, password=password)
+            if user is not None:
+                break
+
+    if user is None:
+        return Response(
+            {"detail": "Wrong password."}, status=status.HTTP_401_UNAUTHORIZED
+        )
+    login(request, user)
+    request.session.set_expiry(60 * 60 * 24 * 30)
+    return Response({"id": user.id, "username": user.username})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def logout_view(request):
+    logout(request)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])
