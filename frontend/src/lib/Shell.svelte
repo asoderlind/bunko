@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import { header } from "$lib/header.svelte";
   import { search } from "$lib/search.svelte";
+  import SearchModal from "$lib/SearchModal.svelte";
   import {
     Menu,
     PanelLeftClose,
@@ -19,9 +20,7 @@
   // Mobile: the sidebar is an overlay drawer.
   let drawer = $state(false);
   // Search is opened from the sidebar; the field renders under the header.
-  const searching = $derived(search.visible);
-  let searchInput = $state<HTMLInputElement | null>(null);
-  let q = $state("");
+
 
   // Persist the desktop preference across reloads.
   if (typeof localStorage !== "undefined") {
@@ -62,16 +61,6 @@
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  $effect(() => {
-    if (searching) searchInput?.focus();
-  });
-
-  function submitSearch(e: SubmitEvent) {
-    e.preventDefault();
-    if (!q.trim()) return;
-    search.hide();
-    window.location.href = `/notes?q=${encodeURIComponent(q.trim())}`;
-  }
 </script>
 
 <div class="flex min-h-dvh">
@@ -155,33 +144,10 @@
 
     </header>
 
-    {#if searching}
-      <form
-        onsubmit={submitSearch}
-        class="flex items-center gap-2 border-b bg-background px-3 py-2"
-      >
-        <Search class="h-4 w-4 shrink-0 text-muted-foreground" />
-        <input
-          bind:this={searchInput}
-          bind:value={q}
-          placeholder="Search notes…"
-          aria-label="Search notes"
-          class="h-10 flex-1 border-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-          onkeydown={(e) => e.key === "Escape" && search.hide()}
-        />
-        <button
-          type="button"
-          class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
-          onclick={() => search.hide()}
-          aria-label="Close search"
-        >
-          <X class="h-5 w-5" />
-        </button>
-      </form>
-    {/if}
-
     <main class="flex min-w-0 flex-1 flex-col">
       {@render children?.()}
     </main>
+
+    <SearchModal />
   </div>
 </div>

@@ -1,24 +1,50 @@
 """Password hashing and session token round-trip."""
 
-from app.auth import hash_password, issue_session, verify_password
+
+def _auth():
+    """Imported lazily: a bad SECRET_KEY makes the import itself raise."""
+    from app import auth
+
+    return auth
 
 
 def test_password_roundtrip():
-    h = hash_password("changeme-qa-only")
-    assert verify_password(h, "changeme-qa-only")
-    assert not verify_password(h, "wrong")
+    auth = _auth()
+    h = auth.hash_password("changeme-qa-only")
+    assert auth.verify_password(h, "changeme-qa-only")
+    assert not auth.verify_password(h, "wrong")
 
 
 def test_hashes_are_salted():
-    assert hash_password("same") != hash_password("same")
+    auth = _auth()
+    assert auth.hash_password("same") != auth.hash_password("same")
 
 
 def test_issue_session_sets_cookie():
     from fastapi import Response
 
     r = Response()
-    issue_session(r, 1)
+    _auth().issue_session(r, 1)
     cookie = r.headers["set-cookie"]
     assert "easy_notes_session=" in cookie
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
+
+
+def test_blank_secret_key_is_refused(monkeypatch):
+    """A blank key would sign forgeable cookies, so startup must fail."""
+    import importlib
+
+    from app import config
+
+    monkeypatch.setenv("SECRET_KEY", "")
+    config.get_settings.cache_clear()
+    try:
+        with __import__("pytest").raises(RuntimeError, match="SECRET_KEY is empty"):
+            if "app.auth" in __import__("sys").modules:
+                importlib.reload(__import__("sys").modules["app.auth"])
+            else:
+                importlib.import_module("app.auth")
+    finally:
+        monkeypatch.undo()
+        config.get_settings.cache_clear()

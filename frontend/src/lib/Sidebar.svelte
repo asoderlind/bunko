@@ -141,19 +141,22 @@
 -->
 <div class="flex h-full flex-col">
   <!-- Same height as the shell's bar so the two line up. -->
-  <div class="flex h-14 shrink-0 items-center gap-1 border-b pl-4 pr-2">
+  <div class="flex h-14 shrink-0 items-center border-b pl-4 pr-2">
     <div class="text-sm font-semibold tracking-tight text-muted-foreground">easy-notes</div>
-    <button
-      class="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      aria-label="Search"
-      onclick={() => search.show()}
-    >
-      <Search class="h-4 w-4" />
-    </button>
   </div>
 
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
     <nav class="space-y-1 p-3 pt-2">
+      <!-- Search opens a modal, so it is a button rather than a link. -->
+      <button
+        onclick={() => search.show()}
+        class="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+      >
+        <Search class="h-4 w-4 shrink-0" />
+        Search
+        <kbd class="ml-auto rounded border px-1.5 text-[10px] text-muted-foreground/70">/</kbd>
+      </button>
+
       {#each NAV as item (item.href)}
         <a
           href={item.href}

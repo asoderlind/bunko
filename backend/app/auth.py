@@ -23,6 +23,15 @@ settings = get_settings()
 
 # Argon2id with library defaults (memory-hard, OWASP-recommended).
 _hasher = PasswordHasher()
+
+# A blank key still signs cookies, and itsdangerous will happily accept them —
+# meaning anyone who can read this source could forge a session. Refuse to
+# start rather than run with a forgeable empty key.
+if not settings.secret_key.strip():
+    raise RuntimeError("SECRET_KEY is empty. Generate one with: openssl rand -base64 48")
+if len(settings.secret_key) < 32:
+    raise RuntimeError("SECRET_KEY is too short; use at least 32 characters.")
+
 _serializer = URLSafeTimedSerializer(settings.secret_key, salt="session")
 
 COOKIE_NAME = settings.session_cookie
