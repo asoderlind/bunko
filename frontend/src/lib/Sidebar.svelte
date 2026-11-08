@@ -35,46 +35,39 @@
     { href: "/tags", label: "Tags", icon: TagIcon },
   ];
 
-  const selectedTags = $derived($page.url.searchParams.getAll("tag"));
-  const activeFolder = $derived($page.url.searchParams.get("folder"));
-  const hasFilters = $derived(selectedTags.length > 0 || !!activeFolder);
+  // Sidebar filter state is local: it narrows the note list *in the sidebar*
+  // rather than navigating to a separate view.
+  let selectedTags = $state<string[]>([]);
+  let activeFolder = $state<string | null>(null);
 
-  /** Navigate to the notes list, optionally with filters, without a reload. */
-  function goNotes(params: URLSearchParams) {
-    const qs = params.toString();
-    onNavigate?.();
-    void goto(`/notes${qs ? "?" + qs : ""}`);
-  }
+  const scopedNotes = $derived(sidebarNotes.items);
+  const hasFilters = $derived(selectedTags.length > 0 || activeFolder !== null);
 
-  function buildParams(): URLSearchParams {
-    const next = new URLSearchParams();
-    selectedTags.forEach((t) => next.append("tag", t));
-    if (activeFolder) next.set("folder", activeFolder);
-    return next;
+  /** Re-query the sidebar list from the current filter state. */
+  function refreshSidebar() {
+    void sidebarNotes.applyFilters({
+      tag: selectedTags.length ? selectedTags : undefined,
+      folder: activeFolder ?? undefined,
+      limit: 10,
+    } as never);
   }
 
   function toggleTag(slug: string) {
-    const next = buildParams();
-    const current = next.getAll("tag");
-    next.delete("tag");
-    const updated = current.includes(slug)
-      ? current.filter((s) => s !== slug)
-      : [...current, slug];
-    updated.forEach((s) => next.append("tag", s));
-    goNotes(next);
+    selectedTags = selectedTags.includes(slug)
+      ? selectedTags.filter((s) => s !== slug)
+      : [...selectedTags, slug];
+    refreshSidebar();
   }
 
   function selectFolder(id: string | null) {
-    const next = buildParams();
-    if (id) next.set("folder", id);
-    else next.delete("folder");
-    goNotes(next);
+    activeFolder = activeFolder === id ? null : id;
+    refreshSidebar();
   }
 
   function clearFilters() {
-    const next = new URLSearchParams();
-    if (activeFolder) next.set("folder", activeFolder);
-    goNotes(next);
+    selectedTags = [];
+    activeFolder = null;
+    refreshSidebar();
   }
 
   async function createFolder() {
@@ -139,7 +132,7 @@
         </a>
       {/each}
 
-      <!-- Folders -->
+      <!-- Folders: all top-level, no parent container item -->
       <div class="pt-1">
         <div class="flex items-center justify-between px-2 pb-1">
           <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
@@ -156,7 +149,7 @@
 
         {#if creatingFolder}
           <form
-            class="mb-1 px-2"
+            class="mb-1 px-1"
             onsubmit={(e) => {
               e.preventDefault();
               void createFolder();
@@ -172,80 +165,30 @@
           </form>
         {/if}
 
-        <button
-          class={cn(
-            "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors",
-            !activeFolder
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-          )}
-          onclick={() => selectFolder(null)}
-        >
-          <Layers class="h-4 w-4 shrink-0" />
-          All notes
-        </button>
-
-        {#each folders.tree as folder (folder.id)}
-          <div>
-            <div
+        {#each folders.rootFolders as folder (folder.id)}
+          <div class="group/folder flex items-center rounded-md transition-colors">
+            <button
               class={cn(
-                "group/folder flex items-center rounded-md transition-colors",
-                activeFolder === folder.id ? "bg-accent" : "hover:bg-accent/50"
+                "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sm transition-colors",
+                activeFolder === folder.id
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               )}
+              aria-pressed={activeFolder === folder.id}
+              onclick={() => selectFolder(folder.id)}
             >
-              {#if folder.children.length}
-                <button
-                  class="ml-1 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                  aria-label={folder.collapsed ? "Expand" : "Collapse"}
-                  onclick={() => void toggleCollapse(folder.id, folder.collapsed)}
-                >
-                  {#if folder.collapsed}
-                    <ChevronRight class="h-3.5 w-3.5" />
-                  {:else}
-                    <ChevronDown class="h-3.5 w-3.5" />
-                  {/if}
-                </button>
-              {:else}
-                <span class="ml-1 w-6"></span>
-              {/if}
-              <button
-                class={cn(
-                  "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-sm transition-colors",
-                  activeFolder === folder.id
-                    ? "text-accent-foreground"
-                    : "text-muted-foreground group-hover/folder:text-foreground"
-                )}
-                onclick={() => selectFolder(folder.id)}
-              >
-                <FolderIcon class="h-4 w-4 shrink-0" />
-                <span class="truncate">{folder.name}</span>
-                <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
-                  {folder.note_count}
-                </span>
-              </button>
-            </div>
-
-            {#if !folder.collapsed && folder.children.length}
-              {#each folder.children as child (child.id)}
-                <button
-                  class={cn(
-                    "flex min-h-8 w-full items-center gap-2 rounded-md pl-9 pr-2 text-sm transition-colors",
-                    activeFolder === child.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                  )}
-                  onclick={() => selectFolder(child.id)}
-                >
-                  <FolderIcon class="h-3.5 w-3.5 shrink-0" />
-                  <span class="truncate">{child.name}</span>
-                  <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
-                    {child.note_count}
-                  </span>
-                </button>
-              {/each}
-            {/if}
+              <FolderIcon class="h-4 w-4 shrink-0" />
+              <span class="truncate">{folder.name}</span>
+              <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
+                {folder.note_count}
+              </span>
+            </button>
           </div>
         {/each}
+
+        {#if folders.items.length === 0 && !creatingFolder}
+          <p class="px-2 py-1 text-xs text-muted-foreground">No folders yet.</p>
+        {/if}
       </div>
 
       <!-- Tag filter -->
@@ -286,11 +229,13 @@
                   {checked}
                   onchange={() => toggleTag(t.slug)}
                 />
+                <!-- Filled in the tag's colour when on; a plain outline when off. -->
                 <span
-                  data-checked={checked}
                   class={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border border-muted-foreground/40 transition-colors",
-                    tagStyle(t.color).box
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border-2 transition-colors",
+                    checked
+                      ? tagStyle(t.color).box
+                      : "border-muted-foreground/50 bg-transparent"
                   )}
                   aria-hidden="true"
                 >
@@ -324,21 +269,40 @@
     </nav>
 
     <div class="border-t px-3 pb-2 pt-2">
-      <a
-        href={hasFilters ? `/notes?${buildParams().toString()}` : "/notes"}
-        onclick={onNavigate}
-        class="block px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 hover:text-foreground"
-      >
-        Recent notes
-      </a>
+      <div class="flex items-center justify-between px-2 pb-1">
+        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+          {#if hasFilters}
+            Filtered
+          {:else}
+            Recent notes
+          {/if}
+        </span>
+        {#if hasFilters}
+          <button
+            onclick={clearFilters}
+            class="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear
+          </button>
+        {/if}
+        <a
+          href="/notes"
+          onclick={onNavigate}
+          class="ml-auto text-xs text-muted-foreground hover:text-foreground"
+        >
+          All
+        </a>
+      </div>
 
-      {#if sidebarNotes.loading && sidebarNotes.items.length === 0}
+      {#if sidebarNotes.loading && scopedNotes.length === 0}
         <p class="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
-      {:else if sidebarNotes.items.length === 0}
-        <p class="px-2 py-1 text-xs text-muted-foreground">No notes yet.</p>
+      {:else if scopedNotes.length === 0}
+        <p class="px-2 py-1 text-xs text-muted-foreground">
+          {hasFilters ? "No notes match these filters." : "No notes yet."}
+        </p>
       {:else}
         <ul class="space-y-px">
-          {#each sidebarNotes.items as n (n.id)}
+          {#each scopedNotes as n (n.id)}
             <li class="group/row flex items-center rounded-md transition-colors hover:bg-accent/50">
               <a
                 href={`/notes/${n.id}`}
@@ -380,7 +344,7 @@
               <Loader2 class="h-3 w-3 animate-spin" /> Loading…
             {:else}
               <ChevronDown class="h-3 w-3" />
-              Load more ({sidebarNotes.items.length} of {sidebarNotes.count})
+              Load more ({scopedNotes.length} of {sidebarNotes.count})
             {/if}
           </button>
         {/if}

@@ -110,6 +110,13 @@ class FoldersStore {
     this.loaded = false;
   }
 
+  /** All folders as a flat list, ordered. No parent container item. */
+  get rootFolders() {
+    return [...this.items].sort(
+      (a, b) => a.position - b.position || a.name.localeCompare(b.name)
+    );
+  }
+
   get tree() {
     const roots = this.items
       .filter((f) => !f.parent_id)
@@ -137,7 +144,7 @@ class NotesStore {
   error = $state<string | null>(null);
   limit = $state(10);
 
-  #filter: ListFilter = {};
+  protected filter: ListFilter = {};
 
   get hasMore() {
     return this.items.length < this.count;
@@ -145,7 +152,7 @@ class NotesStore {
 
   /** Fetch a fresh first page for the given filter. */
   async query(filter: ListFilter = {}) {
-    this.#filter = filter;
+    this.filter = filter;
     this.limit = 10;
     this.loading = true;
     this.error = null;
@@ -168,7 +175,7 @@ class NotesStore {
     this.loadingMore = true;
     this.limit += 10;
     try {
-      const page = await api.listNotes({ ...this.#filter, limit: this.limit, offset: 0 });
+      const page = await api.listNotes({ ...this.filter, limit: this.limit, offset: 0 });
       this.items = page.results;
       this.count = page.count;
     } catch {
@@ -199,8 +206,26 @@ class NotesStore {
 
 export const notes = new NotesStore();
 
-/** Sidebar list: most recent 10, "Load more" appends 10 more. */
-export const sidebarNotes = new NotesStore();
+/**
+ * Sidebar list: most recent 10 of whatever the sidebar filters select,
+ * "Load more" appends 10 more.
+ */
+class SidebarNotesStore extends NotesStore {
+  /** Re-query using the current sidebar filter state. */
+  applyFilters(filter: ListFilter) {
+    this.activeFilter = filter;
+    return this.query(filter);
+  }
+
+  activeFilter: ListFilter = {};
+
+  override reset() {
+    this.activeFilter = {};
+    super.reset();
+  }
+}
+
+export const sidebarNotes = new SidebarNotesStore();
 
 // --- single note + tag polling -------------------------------------------
 

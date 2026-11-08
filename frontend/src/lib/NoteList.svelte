@@ -14,6 +14,7 @@
   let renameOpen = $state(false);
 
   const q = $derived($page.url.searchParams.get("q") ?? "");
+  // Tag filtering lives in the sidebar; keep URL tags working for deep links.
   const tagFilter = $derived($page.url.searchParams.getAll("tag"));
   const folderFilter = $derived($page.url.searchParams.get("folder") ?? "");
 
