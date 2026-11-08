@@ -3,7 +3,7 @@
  *
  * SvelteKit emits hashed chunk names, so a tab left open across a deploy holds
  * references to files that no longer exist and fails on the next lazy import.
- * Poll index.html (which Django serves with no-cache) and compare the build
+ * Poll index.html (served with no-cache) and compare the build
  * hash; when it changes, reload once.
  */
 const CHECK_MS = 5 * 60 * 1000;

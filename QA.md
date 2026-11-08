@@ -5,13 +5,25 @@
 | | |
 |---|---|
 | **URL** | http://100.113.71.15:8000 |
-| **Password** | `changeme-qa-only` |
+| **Password** | see below — temporary, set for this QA pass |
 | **Tailnet only** | bound to `100.113.71.15`; not on LAN or internet |
 
 You land on a password screen — no username, just the password.
 On iPhone: Share → **Add to Home Screen** to test standalone/PWA mode.
 
-Change that password when you're done (`docker compose -f docker-compose.dev.yml exec web python manage.py changepassword axel`).
+### Password
+
+A temporary password was generated for this QA pass. To change it:
+
+```bash
+cd ~/repos/easy-notes
+sg docker -c "docker compose -f docker-compose.dev.yml exec web \
+  python -m app.cli set-password --username axel"
+```
+
+It prompts twice and does not echo, so the password never lands in shell
+history. This app has no signup — that command is how the user is created
+and how it is rotated.
 
 ---
 
@@ -21,7 +33,8 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 - [ ] Open the URL in a **private/incognito window**: you must see the password
       screen, never the note interface (not even a flash of it).
 - [ ] Wrong password → inline "Wrong password.", field stays usable.
-- [ ] Try ~20 wrong passwords quickly → "Too many attempts. Wait a minute."
+- [ ] Wrong password repeatedly → still just "Wrong password." (no rate
+      limiting yet; see Known gaps)
 - [ ] Correct password → app loads.
 - [ ] **Sign out** (bottom of sidebar) → back to the password screen; reload
       keeps you signed out.
@@ -134,7 +147,14 @@ sg docker -c "docker compose -f docker-compose.dev.yml ps"
 sg docker -c "docker compose -f docker-compose.dev.yml logs -f web worker"
 ```
 
-Worker stuck or want a clean slate:
+Health probes:
+
+```bash
+curl -s http://100.113.71.15:8000/health   # liveness
+curl -s http://100.113.71.15:8000/ready    # liveness + database
+```
+
+Worker stuck, or want a clean queue:
 
 ```bash
 sg docker -c "docker compose -f docker-compose.dev.yml restart worker"
@@ -142,6 +162,15 @@ sg docker -c "docker compose -f docker-compose.dev.yml restart worker"
 
 Note: this shell needs `sg docker -c "..."` because the docker group was added
 after this login session started. A fresh login makes plain `docker` work.
+
+## Known gaps
+
+- **No login rate limiting.** The password endpoint is not throttled, so it
+  can be brute-forced by anything that can reach the tailnet address.
+- **No cache-busting on HTML beyond `no-cache`.** If a deploy goes badly
+  wrong mid-flight, a hard refresh is the escape hatch.
+- **Search is `ILIKE`, not full-text.** Fine at a few hundred notes; the
+  "under 200ms on 1k notes" target is unmeasured.
 
 ---
 

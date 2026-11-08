@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
-    // Dev: same-origin proxy to Django so session + CSRF work.
+    // Dev: same-origin proxy to the API so the session cookie works.
     proxy: {
       "/api": { target: "http://web:8000", changeOrigin: false },
       "/admin": { target: "http://web:8000", changeOrigin: false },

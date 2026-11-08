@@ -43,9 +43,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
-      SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
-      DEBUG: ${DJANGO_DEBUG:-1}
-      ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DEBUG: ${DEBUG:-1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
@@ -79,9 +79,9 @@ services:
     stop_grace_period: 150s
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
-      SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
-      DEBUG: ${DJANGO_DEBUG:-1}
-      ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DEBUG: ${DEBUG:-1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
