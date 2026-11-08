@@ -5,12 +5,10 @@
 | | |
 |---|---|
 | **URL** | http://100.113.71.15:8000 |
-| **Username** | `axel` |
 | **Password** | `changeme-qa-only` |
-| **Login page** | http://100.113.71.15:8000/admin/login/?next=/ |
 | **Tailnet only** | bound to `100.113.71.15`; not on LAN or internet |
 
-Sign in once at the login page, then go to `http://100.113.71.15:8000/`.
+You land on a password screen — no username, just the password.
 On iPhone: Share → **Add to Home Screen** to test standalone/PWA mode.
 
 Change that password when you're done (`docker compose -f docker-compose.dev.yml exec web python manage.py changepassword axel`).
@@ -19,11 +17,29 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 
 ## What to test
 
+### 0. Login gate  ← new
+- [ ] Open the URL in a **private/incognito window**: you must see the password
+      screen, never the note interface (not even a flash of it).
+- [ ] Wrong password → inline "Wrong password.", field stays usable.
+- [ ] Try ~20 wrong passwords quickly → "Too many attempts. Wait a minute."
+- [ ] Correct password → app loads.
+- [ ] **Sign out** (bottom of sidebar) → back to the password screen; reload
+      keeps you signed out.
+- [ ] Reload while signed in → stays signed in (session persists ~30 days).
+
+### 0b. Sidebar  ← new
+- [ ] Desktop: fixed rail on the left with Notes / Needs tags / Tags, active
+      item highlighted.
+- [ ] Phone: hamburger in the top bar opens a drawer; tapping a link closes it;
+      tapping the dark backdrop also closes it.
+- [ ] Sign out sits at the bottom of the sidebar.
+
 ### 1. Scratchpad (default route)
 - [ ] Open `/`. The textarea should be focused with no cursor tap needed.
 - [ ] Type a few sentences — a Save bar appears at the bottom only once there's text.
 - [ ] Kill the browser tab, reopen `/` → **draft is still there** (localStorage).
 - [ ] Press `⌘/Ctrl+Enter` → saves and jumps to the note view.
+- [ ] Search icon in the top bar opens a search field; tap outside/Esc closes.
 
 ### 2. Tagging (the interesting part)
 - [ ] Write a note about a specific topic, e.g.
@@ -41,7 +57,7 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
       no mix of the two.
 
 ### 4. Search
-- [ ] Press `/` anywhere (not while in a text field) → search box opens.
+- [ ] Press `/` anywhere (not while in a text field) → search opens.
 - [ ] Search a word from the middle of a note, e.g. `sourdough`.
 - [ ] Search results are clickable. `Esc` closes the search box.
 
@@ -71,6 +87,7 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 
 - No `local_only` toggle in the SPA (backend enforces it; UI control is M3+).
 - No Providers settings screen (part of the spec's M2/M5 work).
+- Tag list is not paginated in the UI (fine up to a few hundred tags).
 - Attachments, vector search, multi-user — out of scope for v1.
 - HTTPS — it's plain HTTP over the tailnet for now. M5 adds TLS.
 
@@ -108,3 +125,5 @@ after this login session started. A fresh login makes plain `docker` work.
 | FTS phrase search | ✅ finds mid-note text |
 | Provider swap (default handover) | ✅ old default demoted |
 | App reachable on tailnet IP only | ✅ |
+| Anonymous data access blocked | ✅ 403 on all data endpoints |
+| Password-only login + throttle | ✅ 401 wrong, 200 right, 429 on flood |
