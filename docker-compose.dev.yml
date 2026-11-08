@@ -32,6 +32,8 @@ services:
     # `docker compose -f docker-compose.dev.yml exec postgres psql ...` for a shell.
 
   web:
+    # Run as the host uid so bind-mounted source files aren't left root-owned.
+    user: "${UID:-1000}:${GID:-1000}"
     build:
       context: .
       dockerfile: Dockerfile
@@ -58,6 +60,8 @@ services:
         condition: service_healthy
 
   worker:
+    # Run as the host uid so bind-mounted source files aren't left root-owned.
+    user: "${UID:-1000}:${GID:-1000}"
     build:
       context: .
       dockerfile: Dockerfile
