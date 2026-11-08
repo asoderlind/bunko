@@ -1,4 +1,4 @@
-# easy-notes
+# bunko
 
 Single-user, self-hosted note-taking app. Type on a scratchpad, save, and the
 note is automatically tagged and titled a few seconds later by a local LLM.
@@ -72,7 +72,7 @@ docker compose -f docker-compose.dev.yml exec worker python -m app.worker --once
 
 # psql
 docker compose -f docker-compose.dev.yml exec postgres \
-  psql -U easy_notes -d easy_notes
+  psql -U bunko -d bunko
 ```
 
 If `docker` needs `sudo`, use `sg docker -c "..."` until you log in again.

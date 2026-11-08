@@ -9,14 +9,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://easy_notes@postgres:5432/easy_notes"
+    database_url: str = "postgresql+psycopg://bunko@postgres:5432/bunko"
 
     # Session signing. Required in production; a dev default keeps `uvicorn`
     # startable without ceremony, but it is loudly overridden in deploy.
     # Dev-only fallback. Production is required to override it (see main.py
     # startup check), so this value never signs a real session cookie.
     secret_key: str = ""
-    session_cookie: str = "easy_notes_session"
+    session_cookie: str = "bunko_session"
     session_max_age: int = 60 * 60 * 24 * 30
 
     debug: bool = True

@@ -87,10 +87,10 @@ def _user_id_from_cookie(token: str | None) -> int | None:
 
 def current_user(
     session: Annotated[Session, Depends(get_session)],
-    easy_notes_session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    bunko_session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> AppUser:
     """Require an authenticated user."""
-    uid = _user_id_from_cookie(easy_notes_session)
+    uid = _user_id_from_cookie(bunko_session)
     if uid is None:
         raise HTTPException(STATUS_NOT_AUTHENTICATED, MSG_NOT_AUTHENTICATED)
 
@@ -102,9 +102,9 @@ def current_user(
 
 def optional_user(
     session: Annotated[Session, Depends(get_session)],
-    easy_notes_session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    bunko_session: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> AppUser | None:
-    uid = _user_id_from_cookie(easy_notes_session)
+    uid = _user_id_from_cookie(bunko_session)
     if uid is None:
         return None
     user = session.get(AppUser, uid)

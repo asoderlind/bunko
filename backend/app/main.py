@@ -21,7 +21,7 @@ log = logging.getLogger("app")
 settings = get_settings()
 
 app = FastAPI(
-    title="easy-notes",
+    title="bunko",
     debug=settings.debug,
     docs_url="/api/docs" if settings.debug else None,
     openapi_url="/api/openapi.json" if settings.debug else None,

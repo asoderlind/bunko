@@ -1,4 +1,4 @@
-# easy-notes — QA guide
+# bunko — QA guide
 
 ## Access
 
@@ -16,7 +16,7 @@ On iPhone: Share → **Add to Home Screen** to test standalone/PWA mode.
 A temporary password was generated for this QA pass. To change it:
 
 ```bash
-cd ~/repos/easy-notes
+cd ~/repos/bunko
 sg docker -c "docker compose -f docker-compose.dev.yml exec web \
   python -m app.cli set-password --username axel"
 ```
@@ -142,7 +142,7 @@ and how it is rotated.
 ## If something is broken
 
 ```bash
-cd ~/repos/easy-notes
+cd ~/repos/bunko
 sg docker -c "docker compose -f docker-compose.dev.yml ps"
 sg docker -c "docker compose -f docker-compose.dev.yml logs -f web worker"
 ```

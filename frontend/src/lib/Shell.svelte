@@ -24,11 +24,11 @@
 
   // Persist the desktop preference across reloads.
   if (typeof localStorage !== "undefined") {
-    collapsed = localStorage.getItem("easy-notes.sidebar-collapsed") === "1";
+    collapsed = localStorage.getItem("bunko.sidebar-collapsed") === "1";
   }
   $effect(() => {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("easy-notes.sidebar-collapsed", collapsed ? "1" : "0");
+      localStorage.setItem("bunko.sidebar-collapsed", collapsed ? "1" : "0");
     }
   });
 
@@ -128,7 +128,7 @@
         {/if}
       </button>
 
-      <span class="px-2 text-sm font-semibold tracking-tight md:hidden">easy-notes</span>
+      <span class="px-2 text-sm font-semibold tracking-tight md:hidden">bunko</span>
 
       <!-- Room for the current page's title, set by the page itself. -->
       {#if header.title}

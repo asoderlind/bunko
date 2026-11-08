@@ -32,7 +32,7 @@ def test_issue_session_sets_cookie():
     r = Response()
     _auth().issue_session(r, 1)
     cookie = r.headers["set-cookie"]
-    assert "easy_notes_session=" in cookie
+    assert "bunko_session=" in cookie
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
 

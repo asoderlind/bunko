@@ -1,4 +1,4 @@
-# Development compose for easy-notes.
+# Development compose for bunko.
 #
 # Ollama is NOT a service here: the model runs on the MacBook over the tailnet.
 # Point OLLAMA_BASE_URL at it in .env.
@@ -10,20 +10,20 @@
 # Ports bind to the tailnet address only (see BIND_HOST), so the app is not
 # reachable from the LAN or the internet -- just from your tailnet devices.
 
-name: easy-notes
+name: bunko
 
 services:
   postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-easy_notes}
-      POSTGRES_USER: ${POSTGRES_USER:-easy_notes}
+      POSTGRES_DB: ${POSTGRES_DB:-bunko}
+      POSTGRES_USER: ${POSTGRES_USER:-bunko}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-easy_notes} -d ${POSTGRES_DB:-easy_notes}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bunko} -d ${POSTGRES_DB:-bunko}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -42,7 +42,7 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bunko}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bunko}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       DEBUG: ${DEBUG:-1}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -78,7 +78,7 @@ services:
     # (spec 6: SIGTERM must finish the current job, not abandon it).
     stop_grace_period: 150s
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bunko}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bunko}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       DEBUG: ${DEBUG:-1}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -92,4 +92,8 @@ services:
         condition: service_healthy
 
 volumes:
+  # external: keeps the pre-rename volume, so existing data is not orphaned
+  # when the compose project name changed.
   pgdata:
+    external: true
+    name: easy-notes_pgdata

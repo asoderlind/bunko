@@ -24,7 +24,7 @@
     <div class="space-y-1">
       <div class="flex items-center gap-2">
         <LockKeyhole class="h-5 w-5 text-muted-foreground" />
-        <h1 class="text-lg font-semibold tracking-tight">easy-notes</h1>
+        <h1 class="text-lg font-semibold tracking-tight">bunko</h1>
       </div>
       <p class="text-sm text-muted-foreground">Enter your password to continue.</p>
     </div>
