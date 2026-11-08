@@ -92,16 +92,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     setDrawer(false);
   }, [location.pathname, params.toString()]);
 
-  // Lock background scrolling while the drawer is open, so a swipe inside the
-  // sidebar can never scroll the notes behind it.
-  useEffect(() => {
-    if (!drawer) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [drawer]);
+  // Background scroll is contained by `overscroll-contain` on the scrollable
+  // regions and `touch-none` on the backdrop. Locking <body> here made the
+  // drawer's own scroller stop responding on iOS, so we deliberately don't.
+
 
   return (
     <div className="flex min-h-dvh">
@@ -121,7 +115,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             aria-hidden="true"
           />
           {/* 90% of the viewport on phones; the rail takes over at md. */}
-          <div className="absolute inset-y-0 left-0 w-[90%] border-r bg-card shadow-xl animate-in slide-in-from-left duration-200">
+          <div className="absolute left-0 top-0 h-dvh w-[90%] border-r bg-card shadow-xl animate-in slide-in-from-left duration-200">
             <SidebarNav onNavigate={() => setDrawer(false)} />
           </div>
         </div>
