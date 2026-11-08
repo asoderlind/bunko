@@ -33,6 +33,26 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 - [ ] Phone: hamburger in the top bar opens a drawer; tapping a link closes it;
       tapping the dark backdrop also closes it.
 - [ ] Sign out sits at the bottom of the sidebar.
+- [ ] **Recent notes** are listed under the nav, newest first, capped at 30.
+- [ ] Long titles end in “…” and the tag pills stay pinned to the right.
+- [ ] Tap a note in the sidebar → opens it, row highlights.
+
+### 0c. Tag filter  ← new
+- [ ] Tap **Filter** above the note list to expand it.
+- [ ] One coloured checkbox per tag; each tag has a different colour.
+- [ ] Ticking one filters the note list (and sets the URL, so a reload keeps it).
+- [ ] Ticking a second one filters to notes having **both**.
+- [ ] The count badge on “Filter” shows how many are active; **Clear filters**
+      resets.
+
+### 0d. Generated titles  ← new
+- [ ] Save a note with a long body. The title starts as the first line, then
+      within ~10s becomes a short generated title (e.g. “Sourdough Starter
+      Progress”) and stops being cut off in the sidebar.
+- [ ] Open the note, tap it, type your own title, Save → your title sticks.
+- [ ] Now edit the **body** and Save → your title is **still yours**, unchanged.
+- [ ] Clear the title and Save → it reverts to derived, and the worker generates
+      a new one on the next pass.
 
 ### 1. Scratchpad (default route)
 - [ ] Open `/`. The textarea should be focused with no cursor tap needed.
