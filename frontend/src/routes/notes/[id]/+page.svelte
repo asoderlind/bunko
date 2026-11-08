@@ -4,7 +4,7 @@
   import { Loader2, Plus } from "lucide-svelte";
   import { DropdownMenu } from "bits-ui";
   import { api, ApiError } from "$lib/api";
-  import { createNoteStore, notes, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { createNoteStore, notes, sidebarNotes, tags, tree } from "$lib/stores.svelte";
   import { tagStyle } from "$lib/tag-colors";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
@@ -56,6 +56,14 @@
   const known = $derived(new Set(chips.map((c) => c.slug)));
   const available = $derived(tags.items.filter((t) => !known.has(t.slug)));
 
+  /** ⌘/Ctrl+S saves in place. Never navigates. */
+  function onEditorKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      void maybeSave();
+    }
+  }
+
   /** Save the body if it changed. Never touches the title. */
   async function maybeSave() {
     const current = store.note;
@@ -72,6 +80,7 @@
       });
       notes.patch(updated.id, () => updated);
       sidebarNotes.patch(updated.id, () => updated);
+      tree.patch(updated.id, () => updated);
       dirty = false;
       void store.load(updated.id);
     } catch {
@@ -182,6 +191,7 @@
     <textarea
       bind:value={body}
       oninput={() => (dirty = true)}
+      onkeydown={onEditorKeydown}
       onfocus={() => (focused = true)}
       onblur={() => void maybeSave()}
       spellcheck="false"

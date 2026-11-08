@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import { api, type Note } from "$lib/api";
   import { header } from "$lib/header.svelte";
-  import { sidebarNotes } from "$lib/stores.svelte";
+  import { tree } from "$lib/stores.svelte";
 
   /**
    * New-note composer. Same editing surface as the note view: a borderless
@@ -49,12 +49,14 @@
       while (target.trim()) {
         if (!created) {
           created = await api.createNote(target);
-          void sidebarNotes.query();
+          // The sidebar renders the tree, so refresh it: the note appears
+          // immediately, while the editor keeps focus.
+          void tree.query();
           // Swap the URL to the real note without remounting this editor.
           history.replaceState({}, "", `/notes/${created.id}`);
         } else {
           created = await api.updateNote(created.id, { body_md: target });
-          sidebarNotes.patch(created.id, () => created!);
+          tree.patch(created.id, () => created!);
         }
         if (latest === target) break;
         target = latest;
@@ -78,11 +80,12 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    // ⌘/Ctrl+Enter still finishes immediately and opens the note properly.
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    // ⌘/Ctrl+S saves immediately (creating the note if needed) and leaves the
+    // editor open, so writing can continue without a page change.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       if (timer) clearTimeout(timer);
-      void finish();
+      void persist(body);
     }
   }
 
@@ -124,7 +127,7 @@
         Open note
       </button>
     {:else}
-      <span class="ml-auto text-xs">⌘/Ctrl + Enter</span>
+      <span class="ml-auto text-xs">⌘/Ctrl + S</span>
     {/if}
   </div>
 </div>
