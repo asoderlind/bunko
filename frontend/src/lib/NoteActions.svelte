@@ -13,6 +13,8 @@
     onNavigateAway,
     align = "end",
     class: className,
+    /** Note view uses the compact menu: download only. */
+    compact = false,
   }: {
     note: Note;
     onDeleted?: () => void;
@@ -20,6 +22,7 @@
     onNavigateAway?: () => void;
     align?: "start" | "end";
     class?: string;
+    compact?: boolean;
   } = $props();
 
   let open = $state(false);
@@ -58,21 +61,23 @@
         <Download class="h-4 w-4" /> Download
       </DropdownMenu.Item>
 
-      <DropdownMenu.Item
-        class="flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-        onSelect={() => onRename?.(note)}
-      >
-        <Pencil class="h-4 w-4" /> Change title
-      </DropdownMenu.Item>
+      {#if !compact}
+        <DropdownMenu.Item
+          class="flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+          onSelect={() => onRename?.(note)}
+        >
+          <Pencil class="h-4 w-4" /> Change title
+        </DropdownMenu.Item>
 
-      <DropdownMenu.Separator class="-mx-1 my-1 h-px bg-border" />
+        <DropdownMenu.Separator class="-mx-1 my-1 h-px bg-border" />
 
-      <DropdownMenu.Item
-        class="flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-400 outline-none data-[highlighted]:bg-red-500/15 data-[highlighted]:text-red-300"
-        onSelect={() => void remove()}
-      >
-        <Trash2 class="h-4 w-4" /> Delete
-      </DropdownMenu.Item>
+        <DropdownMenu.Item
+          class="flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-400 outline-none data-[highlighted]:bg-red-500/15 data-[highlighted]:text-red-300"
+          onSelect={() => void remove()}
+        >
+          <Trash2 class="h-4 w-4" /> Delete
+        </DropdownMenu.Item>
+      {/if}
     </DropdownMenu.Content>
   </DropdownMenu.Portal>
 </DropdownMenu.Root>

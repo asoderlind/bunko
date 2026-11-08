@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
   import { Loader2, Plus } from "lucide-svelte";
   import { DropdownMenu } from "bits-ui";
   import { api, ApiError } from "$lib/api";
@@ -9,17 +8,16 @@
   import { tagStyle } from "$lib/tag-colors";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
-  import RenameDialog from "$lib/RenameDialog.svelte";
 
   const id = $derived($page.params.id!);
   const store = createNoteStore();
 
-  let editing = $state(false);
   let body = $state("");
-  let title = $state("");
+  let dirty = $state(false);
+  let focused = $state(false);
   let saving = $state(false);
+  let saveError = $state<string | null>(null);
   let addError = $state<string | null>(null);
-  let renameOpen = $state(false);
 
   onMount(() => {
     if (!tags.loaded) void tags.load();
@@ -40,8 +38,7 @@
     if (store.note && store.note.id !== lastId) {
       lastId = store.note.id;
       body = store.note.body_md;
-      title = store.note.title;
-      editing = false;
+      dirty = false;
     }
   });
 
@@ -52,20 +49,26 @@
   const known = $derived(new Set(chips.map((c) => c.slug)));
   const available = $derived(tags.items.filter((t) => !known.has(t.slug)));
 
-  async function save() {
+  /** Save the body if it changed. Never touches the title. */
+  async function maybeSave() {
     const current = store.note;
-    if (!current || !body.trim()) return;
+    if (!current || !dirty || !body.trim()) return;
     saving = true;
+    saveError = null;
     try {
-      const patch: Record<string, string> = { body_md: body };
-      if (title.trim() !== current.title) patch.title = title.trim();
-      const updated = await api.updateNote(current.id, patch as never);
+      const updated = await api.updateNote(current.id, { body_md: body });
       store.setNote(updated);
-      store.setTags({ tag_status: updated.tag_status, tag_error: updated.tag_error, tags: updated.tags });
+      store.setTags({
+        tag_status: updated.tag_status,
+        tag_error: updated.tag_error,
+        tags: updated.tags,
+      });
       notes.patch(updated.id, () => updated);
       sidebarNotes.patch(updated.id, () => updated);
-      editing = false;
+      dirty = false;
       void store.load(updated.id);
+    } catch {
+      saveError = "Could not save.";
     } finally {
       saving = false;
     }
@@ -182,15 +185,8 @@
           {/each}
         </select>
 
-        <NoteActions
-          note={n}
-          align="end"
-        onRename={() => (renameOpen = true)}
-          onDeleted={() => {
-            void sidebarNotes.query();
-            void goto("/");
-          }}
-        />
+        <!-- Note view: download only. Title and delete live in the sidebar menu. -->
+        <NoteActions note={n} align="end" compact />
       </div>
     </div>
 
@@ -201,72 +197,43 @@
       <p class="mb-2 text-sm text-muted-foreground">{errorText}</p>
     {/if}
 
-    {#if editing}
-      <div class="space-y-3">
-        <div>
-          <input
-            bind:value={title}
-            placeholder="Title"
-            aria-label="Title"
-            maxlength={200}
-            class="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <p class="mt-1 text-xs text-muted-foreground">
-            {n.title_source === "user"
-              ? "Your title is kept when the note is re-tagged."
-              : "Leave empty to let the title be generated from the note."}
-          </p>
-        </div>
-        <textarea
-          bind:value={body}
-          class="min-h-[45vh] w-full resize-y rounded-md border border-input bg-background px-3 py-3 text-[16px] leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        ></textarea>
-        <div class="flex items-center gap-2">
-          <button
-            onclick={() => void save()}
-            disabled={saving || !body.trim()}
-            class="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            onclick={() => {
-              body = n.body_md;
-              title = n.title;
-              editing = false;
-            }}
-            class="inline-flex h-11 items-center rounded-md px-4 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <span class="text-sm text-muted-foreground">Editing re-tags the note</span>
-        </div>
-      </div>
-    {:else}
-      <button
-        type="button"
-        class="mb-1 block w-full cursor-text border-0 bg-transparent p-0 text-left text-lg font-semibold tracking-tight"
-        onclick={() => (editing = true)}
-        aria-label="Edit note"
-      >
-        {n.title || "(untitled)"}
-      </button>
-      <button
-        type="button"
-        class="block w-full cursor-text border-0 bg-transparent p-0 text-left"
-        onclick={() => (editing = true)}
-        aria-label="Edit note body"
-      >
-        <pre
-          class="whitespace-pre-wrap break-words pb-10 pt-1 font-[inherit] text-[16px] leading-relaxed"
-        >{n.body_md}</pre>
-      </button>
-    {/if}
+    <!--
+      No separate view/edit mode: the body is the editor. The title is shown
+      read-only here; it is changed only from the sidebar's three-dots menu.
+    -->
+    <h2 class="mb-1 text-lg font-semibold tracking-tight">
+      {n.title || "(untitled)"}
+    </h2>
+    <p class="mb-2 text-xs text-muted-foreground">
+      {n.title_source === "user"
+        ? "Title set by you."
+        : "Title is generated from the note."}
+      Change it from the sidebar menu.
+    </p>
+
+    <textarea
+      bind:value={body}
+      oninput={() => (dirty = true)}
+      onfocus={() => (focused = true)}
+      onblur={() => void maybeSave()}
+      spellcheck="false"
+      aria-label="Note body"
+      placeholder="Write something…"
+      class="min-h-[50vh] w-full resize-none border-0 bg-transparent p-0 text-[16px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
+    ></textarea>
+
+    <div class="flex min-h-11 items-center gap-3 border-t pt-2 text-sm text-muted-foreground">
+      {#if saving}
+        Saving…
+      {:else if saveError}
+        <span class="text-red-400">{saveError}</span>
+      {:else if dirty}
+        Edited — saving when you leave the field
+      {:else}
+        Saved
+      {/if}
+      <span class="ml-auto text-xs">Editing re-tags the note</span>
+    </div>
   </div>
 
-  <RenameDialog
-    note={n}
-    bind:open={renameOpen}
-    onSaved={(updated) => store.setNote(updated)}
-  />
 {/if}
