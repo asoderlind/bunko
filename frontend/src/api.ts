@@ -3,16 +3,20 @@ export type TagOnNote = {
   tag_id: string;
   slug: string;
   name: string;
+  color: string;
   source: "auto" | "manual";
   confidence: number | null;
 };
 
 export type TagStatus = "pending" | "processing" | "done" | "failed";
 
+export type TitleSource = "derived" | "generated" | "user";
+
 export type Note = {
   id: string;
   body_md: string;
   title: string;
+  title_source: TitleSource;
   tags: TagOnNote[];
   tag_status: TagStatus;
   tag_error: string;
@@ -32,6 +36,7 @@ export type Tag = {
   slug: string;
   name: string;
   description: string;
+  color: string;
   note_count: number;
 };
 
@@ -107,10 +112,18 @@ export const api = {
   logout: () => request<void>("/auth/logout/", { method: "POST" }),
 
   // --- notes ---
-  listNotes: (params: { q?: string; tag?: string[]; tag_status?: string } = {}) => {
+  listNotes: (
+    params: {
+      q?: string;
+      tag?: string[];
+      tag_status?: string;
+      limit?: number;
+    } = {}
+  ) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set("q", params.q);
     if (params.tag_status) sp.set("tag_status", params.tag_status);
+    if (params.limit) sp.set("limit", String(params.limit));
     (params.tag || []).forEach((t) => sp.append("tag", t));
     const qs = sp.toString();
     return request<Paginated<Note>>(`/notes/${qs ? "?" + qs : ""}`);
@@ -146,7 +159,10 @@ export const api = {
   createTag: (data: { slug: string; name: string; description?: string }) =>
     request<Tag>("/tags/", { method: "POST", body: JSON.stringify(data) }),
 
-  updateTag: (id: string, data: Partial<{ slug: string; name: string; description: string }>) =>
+  updateTag: (
+    id: string,
+    data: Partial<{ slug: string; name: string; description: string; color: string }>
+  ) =>
     request<Tag>(`/tags/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 
   mergeTag: (id: string, merge_into: string) =>

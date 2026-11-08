@@ -51,11 +51,23 @@ export function useNotes(params: {
   q?: string;
   tag?: string[];
   tag_status?: string;
+  limit?: number;
 }) {
   return useQuery({
     queryKey: qk.notes(params),
     queryFn: () => api.listNotes(params),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Bounded, recency-ordered list for the sidebar. */
+export const SIDEBAR_LIMIT = 30;
+
+export function useSidebarNotes() {
+  return useQuery({
+    queryKey: ["notes", "sidebar", SIDEBAR_LIMIT],
+    queryFn: () => api.listNotes({ limit: SIDEBAR_LIMIT }),
+    select: (p) => p.results,
   });
 }
 

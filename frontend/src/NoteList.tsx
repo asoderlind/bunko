@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TagPill } from "@/components/tag-colors";
 import { useNotes } from "@/queries";
 
 export default function NoteList({ inbox = false }: { inbox?: boolean }) {
@@ -24,9 +25,7 @@ export default function NoteList({ inbox = false }: { inbox?: boolean }) {
     <div className="mx-auto w-full max-w-3xl px-4 py-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
-        {tagFilter && (
-          <Badge variant="blue">tag: {tagFilter}</Badge>
-        )}
+        {tagFilter && <Badge variant="muted">tag: {tagFilter}</Badge>}
       </div>
 
       {notes.isPending && (
@@ -61,9 +60,7 @@ export default function NoteList({ inbox = false }: { inbox?: boolean }) {
                   <Badge variant="destructive">failed</Badge>
                 )}
                 {n.tags.map((t) => (
-                  <Badge key={t.id} variant={t.source === "manual" ? "purple" : "blue"}>
-                    {t.name}
-                  </Badge>
+                  <TagPill key={t.id} name={t.name} color={t.color} />
                 ))}
                 <span className="text-xs text-muted-foreground/70">
                   {new Date(n.updated_at).toLocaleDateString()}

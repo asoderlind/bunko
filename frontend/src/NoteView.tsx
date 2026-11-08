@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TagPill } from "@/components/tag-colors";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { ApiError, TagStatus } from "@/api";
 import {
   useAddNoteTag,
@@ -56,9 +58,13 @@ export default function NoteView() {
 
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState("");
+  const [title, setTitle] = useState("");
 
   useEffect(() => {
-    if (note.data && !editing) setBody(note.data.body_md);
+    if (note.data && !editing) {
+      setBody(note.data.body_md);
+      setTitle(note.data.title);
+    }
   }, [note.data, editing]);
 
   if (note.isPending) {
@@ -85,12 +91,16 @@ export default function NoteView() {
   const available = (allTags.data ?? []).filter((t) => !known.has(t.slug));
 
   function save() {
-    if (!body.trim()) return;
+    const current = note.data;
+    if (!current || !body.trim()) return;
     update.mutate(
-      { body_md: body },
       {
-        onSuccess: () => setEditing(false),
-      }
+        body_md: body,
+        // Only send the title if the user actually changed it, so a generated
+        // title is not silently converted into a user title.
+        ...(title.trim() !== current.title ? { title: title.trim() } : {}),
+      },
+      { onSuccess: () => setEditing(false) }
     );
   }
 
@@ -123,20 +133,15 @@ export default function NoteView() {
         <StatusBadge status={status} error={errorText} />
 
         {chips.map((t) => (
-          <Badge
-            key={t.id}
-            variant={t.source === "manual" ? "purple" : "blue"}
-            className="gap-1 pr-1"
-          >
-            {t.name}
+          <TagPill key={t.id} name={t.name} color={t.color} className="gap-0.5 py-0.5 pl-2.5 pr-1">
             <button
-              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full opacity-60 hover:opacity-100"
+              className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full opacity-60 hover:opacity-100"
               aria-label={`Remove ${t.name}`}
               onClick={() => removeTag.mutate({ id: n.id, tagId: t.tag_id })}
             >
               ×
             </button>
-          </Badge>
+          </TagPill>
         ))}
 
         {!tagging && available.length > 0 && (
@@ -163,6 +168,20 @@ export default function NoteView() {
 
       {editing ? (
         <div className="space-y-3">
+          <div>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title"
+              aria-label="Title"
+              maxLength={200}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {n.title_source === "user"
+                ? "Your title is kept when the note is re-tagged."
+                : "Leave empty to let the title be generated from the note."}
+            </p>
+          </div>
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -177,6 +196,7 @@ export default function NoteView() {
               variant="ghost"
               onClick={() => {
                 setBody(n.body_md);
+                setTitle(n.title);
                 setEditing(false);
               }}
             >
@@ -189,12 +209,20 @@ export default function NoteView() {
           )}
         </div>
       ) : (
-        <pre
-          className="cursor-text whitespace-pre-wrap break-words pb-10 pt-1 text-[16px] leading-relaxed"
-          onClick={() => setEditing(true)}
-        >
-          {n.body_md}
-        </pre>
+        <>
+          <h2
+            className="mb-1 cursor-text text-lg font-semibold tracking-tight"
+            onClick={() => setEditing(true)}
+          >
+            {n.title || "(untitled)"}
+          </h2>
+          <pre
+            className="cursor-text whitespace-pre-wrap break-words pb-10 pt-1 text-[16px] leading-relaxed"
+            onClick={() => setEditing(true)}
+          >
+            {n.body_md}
+          </pre>
+        </>
       )}
     </div>
   );
