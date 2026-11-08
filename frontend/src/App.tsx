@@ -92,6 +92,17 @@ function Shell({ children }: { children: React.ReactNode }) {
     setDrawer(false);
   }, [location.pathname, params.toString()]);
 
+  // Lock background scrolling while the drawer is open, so a swipe inside the
+  // sidebar can never scroll the notes behind it.
+  useEffect(() => {
+    if (!drawer) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [drawer]);
+
   return (
     <div className="flex min-h-dvh">
       {/* Desktop rail */}
@@ -105,12 +116,12 @@ function Shell({ children }: { children: React.ReactNode }) {
       {drawer && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 touch-none bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0"
             onClick={() => setDrawer(false)}
             aria-hidden="true"
           />
           {/* 90% of the viewport on phones; the rail takes over at md. */}
-          <div className="absolute inset-y-0 left-0 w-[90%] border-r bg-card shadow-xl">
+          <div className="absolute inset-y-0 left-0 w-[90%] border-r bg-card shadow-xl animate-in slide-in-from-left duration-200">
             <SidebarNav onNavigate={() => setDrawer(false)} />
           </div>
         </div>

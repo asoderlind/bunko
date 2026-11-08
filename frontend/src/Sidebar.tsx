@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TagCheckbox, TagPill } from "@/components/tag-colors";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -106,25 +111,33 @@ function TagFilter({ onNavigate }: { onNavigate?: () => void }) {
   const count = selected.size;
 
   return (
-    <div className="px-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-        aria-expanded={open}
-      >
-        <Filter className="h-4 w-4 shrink-0" />
-        <span>Filter</span>
-        {count > 0 && (
-          <span className="rounded-full bg-primary/20 px-1.5 text-xs text-primary">
-            {count}
-          </span>
-        )}
-        <ChevronDown
-          className={cn("ml-auto h-4 w-4 transition-transform", open && "rotate-180")}
-        />
-      </button>
+    <Collapsible open={open} onOpenChange={setOpen} className="px-1">
+      <CollapsibleTrigger asChild>
+        <button
+          className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        >
+          <Filter className="h-4 w-4 shrink-0" />
+          <span>Filter</span>
+          {count > 0 && (
+            <span className="rounded-full bg-primary/20 px-1.5 text-xs text-primary">
+              {count}
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              "ml-auto h-4 w-4 shrink-0 transition-transform duration-200",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
 
-      {open && (
+      <CollapsibleContent
+        className={cn(
+          "overflow-hidden",
+          "data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+        )}
+      >
         <div className="mt-1 space-y-0.5 pl-1">
           {(tags.data ?? []).length === 0 && (
             <p className="px-2 py-1 text-xs text-muted-foreground">No tags yet.</p>
@@ -159,8 +172,8 @@ function TagFilter({ onNavigate }: { onNavigate?: () => void }) {
             </button>
           )}
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -241,17 +254,20 @@ function NoteLinks({ onNavigate }: { onNavigate?: () => void }) {
           const pills = n.tags.slice(0, 2);
           const overflow = n.tags.length - pills.length;
           return (
-            <li key={n.id} className="group/row relative">
+            <li
+              key={n.id}
+              className="group/row flex items-center rounded-md transition-colors hover:bg-accent/50 focus-within:bg-accent/50"
+            >
               <NavLink
                 to={`/notes/${n.id}`}
                 onClick={onNavigate}
                 title={n.title || undefined}
                 className={({ isActive }) =>
                   cn(
-                    "flex min-h-9 items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition-colors",
+                    "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition-colors",
                     isActive
                       ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      : "text-muted-foreground group-hover/row:text-foreground"
                   )
                 }
               >
@@ -264,7 +280,7 @@ function NoteLinks({ onNavigate }: { onNavigate?: () => void }) {
                       key={t.id}
                       name={t.name}
                       color={t.color}
-                      className="max-w-20 px-1.5 py-0 text-[10px]"
+                      className="max-w-16 px-1.5 py-0 text-[10px]"
                     />
                   ))}
                   {overflow > 0 && (
@@ -275,11 +291,11 @@ function NoteLinks({ onNavigate }: { onNavigate?: () => void }) {
                 </span>
               </NavLink>
 
-              {/* Three-dots menu. Sits outside the link so tapping it does not navigate. */}
+              {/* Reserved slot in the flow: never covers the pills or the title. */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="absolute right-0.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 hover:text-foreground focus-visible:opacity-100 data-[state=open]:bg-background/80 data-[state=open]:opacity-100 md:group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
+                    className="mr-0.5 flex h-8 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100 md:group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
                     aria-label={`Actions for ${n.title || "note"}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
@@ -294,11 +310,7 @@ function NoteLinks({ onNavigate }: { onNavigate?: () => void }) {
                   >
                     <Download className="h-4 w-4" /> Download
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      setRenaming(n);
-                    }}
-                  >
+                  <DropdownMenuItem onSelect={() => setRenaming(n)}>
                     <Pencil className="h-4 w-4" /> Change title
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -364,7 +376,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         >
           Recent notes
         </Link>
-        <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
           <NoteLinks onNavigate={onNavigate} />
         </div>
       </div>
