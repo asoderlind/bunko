@@ -3,7 +3,19 @@
 Single-user, self-hosted note-taking app. Type on a scratchpad, save, and the
 note is automatically tagged and titled a few seconds later by a local LLM.
 
-Tagging is asynchronous and must never block a save.
+## Motivation
+
+I wanted a self-hosted note-taking app that I am able to pick up, throw ideas at, and let a simple local LLM do the boring work of categorizing, tagging, and fetching notes.
+
+## Images
+
+**Editing a note**
+
+<img width="1118" height="631" alt="image" src="https://github.com/user-attachments/assets/297255d4-09fe-4289-a24a-cbc8fbdfbe60" />
+
+**Viewing the tags**
+
+<img width="1111" height="630" alt="image" src="https://github.com/user-attachments/assets/4b445473-5954-43e4-82e1-d8973d7bea40" />
 
 ## Stack
 
