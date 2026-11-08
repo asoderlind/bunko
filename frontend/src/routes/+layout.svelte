@@ -5,11 +5,13 @@
   import Login from "$lib/Login.svelte";
   import Shell from "$lib/Shell.svelte";
   import { Loader2 } from "lucide-svelte";
+  import { watchDeploy } from "$lib/deploy-check";
 
   let { children } = $props();
 
   onMount(() => {
     void auth.load();
+    watchDeploy();
   });
 </script>
 

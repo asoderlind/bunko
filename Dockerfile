@@ -36,10 +36,11 @@ COPY pyproject.toml uv.lock* ./
 RUN uv pip install --system --no-cache -r pyproject.toml
 
 COPY backend/ /app/
+WORKDIR /app
 
 # Built SPA. Kept outside /app so the dev bind-mount of ./backend:/app
 # doesn't shadow it.
 COPY --from=frontend /fe/build /spa
 
 EXPOSE 8000
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

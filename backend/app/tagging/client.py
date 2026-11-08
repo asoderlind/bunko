@@ -1,12 +1,15 @@
-"""OpenAI-compatible HTTP client for tagging. No Django models imported here
-so the parsing logic stays unit-testable without a database."""
+"""OpenAI-compatible provider client and prompt construction.
+
+No ORM imports, so parsing is unit-testable without a database.
+"""
 
 from __future__ import annotations
 
 import json
 import os
-import urllib.error
-import urllib.request
+from typing import Any, Protocol
+
+import httpx
 
 SYSTEM_PROMPT_TEMPLATE = """You tag short personal notes.
 
@@ -27,7 +30,7 @@ Hard rules:
 
 Respond with JSON only, matching the required schema."""
 
-JSON_SCHEMA = {
+JSON_SCHEMA: dict[str, Any] = {
     "name": "tagging_result",
     "strict": True,
     "schema": {
@@ -56,69 +59,74 @@ JSON_SCHEMA = {
 
 
 class ProviderError(Exception):
-    """Raised when the provider call fails in a way worth reporting."""
+    """The provider call failed in a way worth reporting."""
 
 
-class ValidationError_(Exception):
-    """Raised when model output violates the contract."""
+class OutputError(Exception):
+    """Model output violated the contract."""
 
 
-def build_system_prompt(tags) -> str:
-    """tags: iterable of objects with .slug and .description."""
+class ProfileLike(Protocol):
+    base_url: str
+    model: str
+    api_key_env: str
+
+
+class TagLike(Protocol):
+    slug: str
+    description: str
+
+
+def build_system_prompt(tags: list[TagLike]) -> str:
     lines = []
-    for tag in tags:
-        desc = (tag.description or "").strip() or "(no description)"
-        lines.append(f"- {tag.slug} - {desc}")
+    for t in tags:
+        desc = (t.description or "").strip() or "(no description)"
+        lines.append(f"- {t.slug} - {desc}")
     return SYSTEM_PROMPT_TEMPLATE.format(tag_list="\n".join(lines) or "(no tags defined)")
 
 
 def truncate_body(body: str, limit: int) -> str:
-    if len(body) <= limit:
-        return body
-    return body[:limit]
+    return body if len(body) <= limit else body[:limit]
 
 
 def parse_tag_response(
-    payload: dict, allowed_slugs: set[str]
-) -> tuple[list[dict], bool, str | None]:
-    """Validate model output. Returns (valid_tags, none_apply, title).
+    payload: Any, allowed_slugs: set[str]
+) -> tuple[list[dict[str, Any]], bool, str | None]:
+    """Validate model output -> (valid_tags, none_apply, title).
 
-    Unknown slugs are dropped silently (spec 6). Malformed structure raises
-    ValidationError_ so the caller can retry once.
+    Unknown slugs are dropped silently; structural violations raise.
     """
     if not isinstance(payload, dict):
-        raise ValidationError_("Response is not a JSON object")
+        raise OutputError("Response is not a JSON object")
 
     tags = payload.get("tags")
     none_apply = payload.get("none_apply", False)
     if not isinstance(tags, list):
-        raise ValidationError_("`tags` missing or not a list")
+        raise OutputError("`tags` missing or not a list")
     if not isinstance(none_apply, bool):
-        raise ValidationError_("`none_apply` missing or not a boolean")
+        raise OutputError("`none_apply` missing or not a boolean")
     if len(tags) > 5:
-        raise ValidationError_("More than 5 tags returned")
+        raise OutputError("More than 5 tags returned")
 
-    raw_title = payload.get("title")
     title: str | None = None
+    raw_title = payload.get("title")
     if isinstance(raw_title, str):
         cleaned = " ".join(raw_title.split()).strip().rstrip(".")
         if cleaned:
             title = cleaned[:200]
 
-    valid: list[dict] = []
+    valid: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in tags:
         if not isinstance(item, dict):
-            raise ValidationError_("Tag entry is not an object")
+            raise OutputError("Tag entry is not an object")
         slug = item.get("slug")
         if not isinstance(slug, str):
-            raise ValidationError_("Tag entry missing string slug")
+            raise OutputError("Tag entry missing string slug")
         confidence = item.get("confidence", 0.0)
         if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
             confidence = 0.0
-        if slug not in allowed_slugs:
-            continue
-        if slug in seen:
+        if slug not in allowed_slugs or slug in seen:
             continue
         seen.add(slug)
         valid.append({"slug": slug, "confidence": float(confidence)})
@@ -126,7 +134,7 @@ def parse_tag_response(
     return valid, none_apply, title
 
 
-def _extract_json(content: str):
+def extract_json(content: str) -> Any:
     """Models sometimes wrap JSON in fences even in json_schema mode."""
     content = content.strip()
     if content.startswith("```"):
@@ -135,15 +143,14 @@ def _extract_json(content: str):
     start = content.find("{")
     end = content.rfind("}")
     if start == -1 or end == -1 or end < start:
-        raise ValidationError_("No JSON object found in response")
+        raise OutputError("No JSON object found in response")
     try:
         return json.loads(content[start : end + 1])
     except json.JSONDecodeError as exc:
-        raise ValidationError_(f"Invalid JSON: {exc}") from exc
+        raise OutputError(f"Invalid JSON: {exc}") from exc
 
 
-def call_provider(profile, system_prompt: str, user_body: str, timeout: int) -> dict:
-    """POST to {base_url}/chat/completions and return the parsed JSON payload."""
+def call_provider(profile: ProfileLike, system_prompt: str, user_body: str, timeout: int) -> Any:
     url = profile.base_url.rstrip("/") + "/chat/completions"
     body = {
         "model": profile.model,
@@ -161,20 +168,21 @@ def call_provider(profile, system_prompt: str, user_body: str, timeout: int) -> 
         if key:
             headers["Authorization"] = f"Bearer {key}"
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    # The URL comes from a ProviderProfile an operator configured, and is
+    # constrained to http(s) here so a bad profile cannot read local files.
+    if not url.startswith(("http://", "https://")):
+        raise ProviderError(f"Unsupported provider URL scheme: {url}")
+
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:300]
-        raise ProviderError(f"HTTP {exc.code} from provider: {detail}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=body, headers=headers)
+    except httpx.HTTPError as exc:
         raise ProviderError(f"Provider unreachable: {exc}") from exc
+
+    if resp.status_code >= 400:
+        detail = resp.text[:300]
+        raise ProviderError(f"HTTP {resp.status_code} from provider: {detail}")
+    raw = resp.text
 
     try:
         envelope = json.loads(raw)
@@ -182,4 +190,4 @@ def call_provider(profile, system_prompt: str, user_body: str, timeout: int) -> 
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
         raise ProviderError(f"Unexpected provider envelope: {raw[:300]}") from exc
 
-    return _extract_json(content)
+    return extract_json(content)
