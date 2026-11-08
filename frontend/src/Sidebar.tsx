@@ -340,43 +340,51 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <nav className="shrink-0 space-y-1 p-3 pb-2">
-        <div className="px-2 pb-2 pt-1 text-sm font-semibold tracking-tight text-muted-foreground">
+      {/*
+        Structure follows Open WebUI's sidebar: one bounded column with a
+        fixed header, ONE scrollable middle region, and a pinned footer.
+        The tag filter lives inside the scroll region rather than above it,
+        so expanding it can't squeeze the note list to nothing.
+      */}
+      <div className="shrink-0 border-b px-3 py-2">
+        <div className="px-1 text-sm font-semibold tracking-tight text-muted-foreground">
           easy-notes
         </div>
+      </div>
 
-        {NAV.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <nav className="space-y-1 p-3 pt-2">
+          {NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors",
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                )
+              }
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
+
+          <TagFilter onNavigate={onNavigate} />
+        </nav>
+
+        <div className="border-t px-3 pb-2 pt-2">
+          <Link
+            to="/"
             onClick={onNavigate}
-            className={({ isActive }) =>
-              cn(
-                "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-              )
-            }
+            className="block px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 hover:text-foreground"
           >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
-          </NavLink>
-        ))}
-
-        <TagFilter onNavigate={onNavigate} />
-      </nav>
-
-      <div className="flex min-h-0 flex-1 flex-col border-t px-3 pt-2">
-        <Link
-          to="/"
-          onClick={onNavigate}
-          className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 hover:text-foreground"
-        >
-          Recent notes
-        </Link>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
+            Recent notes
+          </Link>
           <NoteLinks onNavigate={onNavigate} />
         </div>
       </div>
