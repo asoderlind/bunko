@@ -1,188 +1,199 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { api, ApiError, Note, TagsResponse } from "./api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { ApiError, TagStatus } from "@/api";
+import {
+  useAddNoteTag,
+  useDeleteNote,
+  useNote,
+  useNoteTags,
+  useRemoveNoteTag,
+  useTags,
+  useUpdateNote,
+} from "@/queries";
 
-const POLL_MS = 2000;
+function StatusBadge({ status, error }: { status: TagStatus; error?: string }) {
+  if (status === "pending" || status === "processing") {
+    return (
+      <Badge variant="muted" className="gap-1">
+        <Loader2 className="h-3 w-3 animate-spin" /> tagging…
+      </Badge>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <Badge variant="destructive" title={error}>
+        tagging failed
+      </Badge>
+    );
+  }
+  return null;
+}
 
 export default function NoteView() {
   const { id } = useParams<{ id: string }>();
-  const [note, setNote] = useState<Note | null>(null);
-  const [body, setBody] = useState("");
-  const [tagState, setTagState] = useState<TagsResponse | null>(null);
-  const [allTags, setAllTags] = useState<{ slug: string; name: string }[]>([]);
-  const [adding, setAdding] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const nav = useNavigate();
+  const note = useNote(id);
+  const tagsQ = useNoteTags(
+    id,
+    note.data
+      ? {
+          tag_status: note.data.tag_status,
+          tag_error: note.data.tag_error,
+          tags: note.data.tags,
+        }
+      : undefined
+  );
+  const allTags = useTags();
+  const addTag = useAddNoteTag(id ?? "");
+  const removeTag = useRemoveNoteTag(id ?? "");
+  const update = useUpdateNote(id ?? "");
+  const del = useDeleteNote();
+
   const [editing, setEditing] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  const [body, setBody] = useState("");
 
   useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    api
-      .getNote(id)
-      .then((n) => {
-        if (!alive) return;
-        setNote(n);
-        setBody(n.body_md);
-        setTagState({ tag_status: n.tag_status, tag_error: n.tag_error, tags: n.tags });
-      })
-      .catch(() => setError("Could not load note."));
-    api.listTags().then((p) => alive && setAllTags(p.results)).catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [id]);
+    if (note.data && !editing) setBody(note.data.body_md);
+  }, [note.data, editing]);
 
-  // Poll tags until tagging settles (spec 8).
-  useEffect(() => {
-    if (!id) return;
-    const status = tagState?.tag_status;
-    if (!status || status === "done" || status === "failed") return;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const r = await api.getNoteTags(id);
-        if (!cancelled) setTagState(r);
-      } catch {
-        /* keep polling */
-      }
-    }, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [id, tagState?.tag_status]);
-
-  async function saveBody() {
-    if (!id || !note) return;
-    try {
-      const updated = await api.updateNote(id, { body_md: body });
-      setNote(updated);
-      setTagState({ tag_status: updated.tag_status, tag_error: updated.tag_error, tags: updated.tags });
-      setEditing(false);
-      setDirty(false);
-    } catch {
-      setError("Could not save changes.");
-    }
+  if (note.isPending) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+      </div>
+    );
+  }
+  if (note.isError || !note.data) {
+    return (
+      <div className="mx-auto max-w-3xl p-5 text-sm text-red-400">
+        Could not load this note.
+      </div>
+    );
   }
 
-  async function removeTag(tagId: string) {
-    if (!id) return;
-    try {
-      setTagState(await api.removeNoteTag(id, tagId));
-    } catch {
-      setError("Could not remove tag.");
-    }
-  }
-
-  async function addTag(slug: string) {
-    if (!id || !slug) return;
-    try {
-      setTagState(await api.addNoteTag(id, slug));
-      setAdding("");
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 400) setError("That tag does not exist.");
-      else setError("Could not add tag.");
-    }
-  }
-
-  async function del() {
-    if (!id) return;
-    if (!confirm("Delete this note?")) return;
-    await api.deleteNote(id);
-    window.location.href = "/";
-  }
-
-  if (error && !note) return <div className="page"><div className="banner err">{error}</div></div>;
-  if (!note) return <div className="page muted">Loading…</div>;
-
-  const status = tagState?.tag_status ?? note.tag_status;
+  const n = note.data;
+  const status = tagsQ.data?.tag_status ?? n.tag_status;
+  const errorText = tagsQ.data?.tag_error ?? n.tag_error;
+  const chips = tagsQ.data?.tags ?? n.tags;
   const tagging = status === "pending" || status === "processing";
-  const knownSlugs = new Set((tagState?.tags ?? []).map((t) => t.slug));
+  const known = new Set(chips.map((c) => c.slug));
+  const available = (allTags.data ?? []).filter((t) => !known.has(t.slug));
+
+  function save() {
+    if (!body.trim()) return;
+    update.mutate(
+      { body_md: body },
+      {
+        onSuccess: () => setEditing(false),
+      }
+    );
+  }
+
+  function onDelete() {
+    if (!confirm("Delete this note?")) return;
+    del.mutate(n.id, { onSuccess: () => nav("/", { replace: true }) });
+  }
+
+  const addTagError =
+    addTag.error instanceof ApiError && addTag.error.status === 400
+      ? "That tag does not exist."
+      : addTag.error
+        ? "Could not add tag."
+        : null;
 
   return (
-    <div className="page note-view">
-      <div className="row between">
-        <Link to="/" className="back">← Back</Link>
-        <button className="btn ghost danger" onClick={() => void del()}>Delete</button>
+    <div className="mx-auto w-full max-w-3xl px-4 py-4">
+      <div className="mb-3 flex items-center justify-between">
+        <Button variant="ghost" asChild className="-ml-2 px-2">
+          <Link to="/">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Link>
+        </Button>
+        <Button variant="ghost" className="text-red-400" onClick={onDelete}>
+          Delete
+        </Button>
       </div>
 
-      {error && <div className="banner err">{error}</div>}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <StatusBadge status={status} error={errorText} />
 
-      <div className="tag-row">
-        {tagging && <span className="chip pending">tagging…</span>}
-        {status === "failed" && (
-          <span className="chip failed" title={tagState?.tag_error || note.tag_error}>
-            tagging failed
-          </span>
-        )}
-        {(tagState?.tags ?? []).map((t) => (
-          <span key={t.id} className={`chip ${t.source}`}>
+        {chips.map((t) => (
+          <Badge
+            key={t.id}
+            variant={t.source === "manual" ? "purple" : "blue"}
+            className="gap-1 pr-1"
+          >
             {t.name}
             <button
-              className="chip-x"
+              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full opacity-60 hover:opacity-100"
               aria-label={`Remove ${t.name}`}
-              onClick={() => void removeTag(t.tag_id)}
+              onClick={() => removeTag.mutate({ id: n.id, tagId: t.tag_id })}
             >
               ×
             </button>
-          </span>
+          </Badge>
         ))}
 
-        {!tagging && (
-          <select
-            className="tag-add"
-            value={adding}
-            onChange={(e) => void addTag(e.target.value)}
+        {!tagging && available.length > 0 && (
+          <Select
+            className="h-8 w-auto min-w-24 px-2 text-xs"
+            value=""
+            onChange={(e) => e.target.value && addTag.mutate({ id: n.id, slug: e.target.value })}
             aria-label="Add tag"
           >
             <option value="">+ tag</option>
-            {allTags
-              .filter((t) => !knownSlugs.has(t.slug))
-              .map((t) => (
-                <option key={t.slug} value={t.slug}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
+            {available.map((t) => (
+              <option key={t.id} value={t.slug}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
         )}
       </div>
 
-      {status === "failed" && tagState?.tag_error && (
-        <p className="muted small">{tagState.tag_error}</p>
+      {addTagError && <p className="mb-2 text-sm text-red-400">{addTagError}</p>}
+      {status === "failed" && errorText && (
+        <p className="mb-2 text-sm text-muted-foreground">{errorText}</p>
       )}
 
       {editing ? (
-        <>
-          <textarea
-            className="editor"
+        <div className="space-y-3">
+          <Textarea
             value={body}
-            onChange={(e) => {
-              setBody(e.target.value);
-              setDirty(true);
-            }}
-            spellCheck={false}
+            onChange={(e) => setBody(e.target.value)}
+            className="min-h-[45vh] resize-y py-3 text-[16px] leading-relaxed"
+            autoFocus
           />
-          <div className="row gap">
-            <button className="btn primary" onClick={() => void saveBody()} disabled={!dirty}>
-              Save
-            </button>
-            <button
-              className="btn ghost"
+          <div className="flex items-center gap-2">
+            <Button onClick={save} disabled={update.isPending || !body.trim()}>
+              {update.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => {
-                setBody(note.body_md);
+                setBody(n.body_md);
                 setEditing(false);
-                setDirty(false);
               }}
             >
               Cancel
-            </button>
-            <span className="hint">Editing resets tagging</span>
+            </Button>
+            <span className="text-sm text-muted-foreground">Editing re-tags the note</span>
           </div>
-        </>
+          {update.isError && (
+            <p className="text-sm text-red-400">Could not save changes.</p>
+          )}
+        </div>
       ) : (
-        <pre className="note-body" onClick={() => setEditing(true)}>
-          {note.body_md}
+        <pre
+          className="cursor-text whitespace-pre-wrap break-words pb-10 pt-1 text-[16px] leading-relaxed"
+          onClick={() => setEditing(true)}
+        >
+          {n.body_md}
         </pre>
       )}
     </div>

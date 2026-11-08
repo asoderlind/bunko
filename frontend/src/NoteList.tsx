@@ -1,78 +1,73 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, Note, Tag } from "./api";
+import { Link, useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useNotes } from "@/queries";
 
-export default function NoteList() {
+export default function NoteList({ inbox = false }: { inbox?: boolean }) {
   const [params] = useSearchParams();
-  const nav = useNavigate();
   const q = params.get("q") || "";
-  const statusFilter = params.get("status") || "";
   const tagFilter = params.get("tag") || "";
 
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
+  const notes = useNotes({
+    q: q || undefined,
+    tag: tagFilter ? [tagFilter] : undefined,
+    // The needs-tags inbox is "tagged, but nothing was applied" (spec 6).
+    tag_status: inbox ? "done" : undefined,
+  });
 
-  useEffect(() => {
-    api.listTags().then((p) => setTags(p.results)).catch(() => {});
-  }, []);
+  const all = notes.data?.results ?? [];
+  const shown = inbox ? all.filter((n) => n.tags.length === 0) : all;
 
-  useEffect(() => {
-    setLoading(true);
-    api
-      .listNotes({
-        q: q || undefined,
-        tag_status: statusFilter || undefined,
-        tag: tagFilter ? [tagFilter] : undefined,
-      })
-      .then((p) => setNotes(p.results))
-      .catch(() => setNotes([]))
-      .finally(() => setLoading(false));
-  }, [q, statusFilter, tagFilter]);
-
-  // Needs-tags inbox: done but with zero tags.
-  const showingInbox = statusFilter === "done" && !q && !tagFilter;
-  const shown = showingInbox ? notes.filter((n) => n.tags.length === 0) : notes;
+  const heading = inbox ? "Needs tags" : q ? `Search: ${q}` : "Notes";
 
   return (
-    <div className="page">
-      <div className="row between">
-        <h1 className="h1">{showingInbox ? "Needs tags" : q ? `Search: ${q}` : "Notes"}</h1>
-        <div className="row gap small">
-          <Link className="btn ghost" to="/inbox">Inbox</Link>
-          <Link className="btn ghost" to="/tags">Tags</Link>
-        </div>
+    <div className="mx-auto w-full max-w-3xl px-4 py-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
+        {tagFilter && (
+          <Badge variant="blue">tag: {tagFilter}</Badge>
+        )}
       </div>
 
-      {tagFilter && (
-        <div className="tag-row">
-          <span className="chip">tag: {tagFilter}
-            <button className="chip-x" onClick={() => nav("/")}>×</button>
-          </span>
+      {notes.isPending && (
+        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       )}
 
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && shown.length === 0 && (
-        <p className="muted">
-          {showingInbox ? "Nothing waiting for tags." : "No notes yet."}
+      {notes.isError && (
+        <p className="py-6 text-sm text-red-400">Could not load notes.</p>
+      )}
+
+      {!notes.isPending && shown.length === 0 && (
+        <p className="py-6 text-sm text-muted-foreground">
+          {inbox ? "Nothing waiting for tags." : q ? "No matches." : "No notes yet."}
         </p>
       )}
 
-      <ul className="note-list">
+      <ul className="divide-y">
         {shown.map((n) => (
           <li key={n.id}>
-            <Link to={`/notes/${n.id}`} className="note-item">
-              <span className="note-title">{n.title || "(untitled)"}</span>
-              <span className="note-meta">
+            <Link
+              to={`/notes/${n.id}`}
+              className="block min-h-11 py-3.5 transition-colors hover:bg-accent/40"
+            >
+              <span className="block truncate">{n.title || "(untitled)"}</span>
+              <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 {(n.tag_status === "pending" || n.tag_status === "processing") && (
-                  <span className="chip pending small">tagging…</span>
+                  <Badge variant="muted">tagging…</Badge>
                 )}
-                {n.tag_status === "failed" && <span className="chip failed small">failed</span>}
+                {n.tag_status === "failed" && (
+                  <Badge variant="destructive">failed</Badge>
+                )}
                 {n.tags.map((t) => (
-                  <span key={t.id} className="chip small">{t.name}</span>
+                  <Badge key={t.id} variant={t.source === "manual" ? "purple" : "blue"}>
+                    {t.name}
+                  </Badge>
                 ))}
-                <span className="dim">{new Date(n.updated_at).toLocaleDateString()}</span>
+                <span className="text-xs text-muted-foreground/70">
+                  {new Date(n.updated_at).toLocaleDateString()}
+                </span>
               </span>
             </Link>
           </li>

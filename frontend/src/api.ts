@@ -1,59 +1,3 @@
-const BASE = "/api";
-
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
-export class ApiError extends Error {
-  status: number;
-  body: unknown;
-  constructor(status: number, body: unknown) {
-    super(`HTTP ${status}`);
-    this.status = status;
-    this.body = body;
-  }
-}
-
-async function request<T>(
-  path: string,
-  opts: RequestInit = {}
-): Promise<T> {
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...((opts.headers as Record<string, string>) || {}),
-  };
-  if (opts.body) headers["Content-Type"] = "application/json";
-
-  const method = (opts.method || "GET").toUpperCase();
-  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const token = getCookie("csrftoken");
-    if (token) headers["X-CSRFToken"] = token;
-  }
-
-  const res = await fetch(BASE + path, {
-    ...opts,
-    headers,
-    credentials: "same-origin",
-  });
-
-  if (res.status === 204) return undefined as T;
-
-  const text = await res.text();
-  const body = text ? safeJson(text) : null;
-
-  if (!res.ok) throw new ApiError(res.status, body);
-  return body as T;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
 export type TagOnNote = {
   id: string;
   tag_id: string;
@@ -91,6 +35,8 @@ export type Tag = {
   note_count: number;
 };
 
+export type User = { id: number; username: string };
+
 export type Paginated<T> = {
   count: number;
   next: string | null;
@@ -98,7 +44,69 @@ export type Paginated<T> = {
   results: T[];
 };
 
+const BASE = "/api";
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown) {
+    super(`HTTP ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...((opts.headers as Record<string, string>) || {}),
+  };
+  if (opts.body) headers["Content-Type"] = "application/json";
+
+  const method = (opts.method || "GET").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const token = getCookie("csrftoken");
+    if (token) headers["X-CSRFToken"] = token;
+  }
+
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers,
+    credentials: "same-origin",
+  });
+
+  if (res.status === 204) return undefined as T;
+
+  const text = await res.text();
+  const body = text ? safeJson(text) : null;
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body as T;
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 export const api = {
+  // --- auth ---
+  me: () => request<User | null>("/user/"),
+  login: (password: string) =>
+    request<User>("/auth/login/", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  logout: () => request<void>("/auth/logout/", { method: "POST" }),
+
+  // --- notes ---
   listNotes: (params: { q?: string; tag?: string[]; tag_status?: string } = {}) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set("q", params.q);
@@ -132,6 +140,7 @@ export const api = {
   removeNoteTag: (id: string, tagId: string) =>
     request<TagsResponse>(`/notes/${id}/tags/${tagId}/`, { method: "DELETE" }),
 
+  // --- tags ---
   listTags: () => request<Paginated<Tag>>("/tags/"),
 
   createTag: (data: { slug: string; name: string; description?: string }) =>
@@ -141,7 +150,15 @@ export const api = {
     request<Tag>(`/tags/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 
   mergeTag: (id: string, merge_into: string) =>
-    request<Tag>(`/tags/${id}/merge/`, { method: "POST", body: JSON.stringify({ merge_into }) }),
-
-  whoami: () => request<{ id: number; username: string } | null>("/user/"),
+    request<Tag>(`/tags/${id}/merge/`, {
+      method: "POST",
+      body: JSON.stringify({ merge_into }),
+    }),
 };
+
+export const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");

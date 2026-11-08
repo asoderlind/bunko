@@ -1,123 +1,155 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, Tag } from "./api";
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+import { useState } from "react";
+import { Loader2, Merge } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tag, slugify } from "@/api";
+import { useCreateTag, useMergeTag, useTags } from "@/queries";
 
 export default function Tags() {
-  const [tags, setTags] = useState<Tag[]>([]);
+  const tags = useTags();
+  const createTag = useCreateTag();
+  const mergeTag = useMergeTag();
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [mergeFrom, setMergeFrom] = useState<Tag | null>(null);
   const [mergeInto, setMergeInto] = useState("");
 
-  const load = () => api.listTags().then((p) => setTags(p.results)).catch(() => {});
-  useEffect(() => { void load(); }, []);
+  const slug = slugify(name);
 
-  async function create() {
-    const slug = slugify(name);
+  function create() {
     if (!slug) return;
-    try {
-      setError(null);
-      await api.createTag({ slug, name: name.trim(), description: description.trim() });
-      setName("");
-      setDescription("");
-      await load();
-    } catch {
-      setError("Could not create tag — it may already exist.");
-    }
-  }
-
-  async function doMerge() {
-    if (!mergeFrom || !mergeInto) return;
-    try {
-      setError(null);
-      await api.mergeTag(mergeFrom.id, mergeInto);
-      setMergeFrom(null);
-      setMergeInto("");
-      await load();
-    } catch {
-      setError("Merge failed.");
-    }
+    createTag.mutate(
+      { slug, name: name.trim(), description: description.trim() },
+      {
+        onSuccess: () => {
+          setName("");
+          setDescription("");
+        },
+      }
+    );
   }
 
   return (
-    <div className="page">
-      <div className="row between">
-        <h1 className="h1">Tags</h1>
-        <Link className="btn ghost" to="/">← Notes</Link>
-      </div>
+    <div className="mx-auto w-full max-w-3xl px-4 py-5">
+      <h1 className="mb-4 text-xl font-semibold tracking-tight">Tags</h1>
 
-      {error && <div className="banner err">{error}</div>}
-
-      <div className="card">
-        <h2 className="h2">New tag</h2>
-        <input
-          className="input"
+      <section className="mb-6 space-y-2 rounded-xl border bg-card p-4">
+        <h2 className="text-sm font-medium text-muted-foreground">New tag</h2>
+        <Input
           placeholder="Name (e.g. Trading)"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <input
-          className="input"
+        <Input
           placeholder="One line: what belongs in this tag?"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
           maxLength={200}
+          onChange={(e) => setDescription(e.target.value)}
         />
-        <p className="muted small">
-          Slug: <code>{slugify(name) || "—"}</code> — the description is load-bearing;
-          it is how the model tells similar tags apart.
+        <p className="text-sm text-muted-foreground">
+          Slug: <code className="rounded bg-muted px-1">{slug || "—"}</code> — the
+          description is how the model tells similar tags apart.
         </p>
-        <button className="btn primary" onClick={() => void create()} disabled={!slugify(name)}>
-          Create
-        </button>
-      </div>
+        <Button onClick={create} disabled={!slug || createTag.isPending}>
+          {createTag.isPending ? "Creating…" : "Create"}
+        </Button>
+        {createTag.isError && (
+          <p className="text-sm text-red-400">
+            Could not create — a tag with that slug may already exist.
+          </p>
+        )}
+      </section>
 
-      <ul className="note-list">
-        {tags.map((t) => (
-          <li key={t.id} className="tag-item">
-            <div>
-              <span className="tag-name">{t.name}</span>
-              <span className="dim small"> /{t.slug} · {t.note_count} note{t.note_count === 1 ? "" : "s"}</span>
-              {t.description && <div className="muted small">{t.description}</div>}
+      {tags.isPending && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      )}
+
+      <ul className="divide-y">
+        {(tags.data ?? []).map((t) => (
+          <li key={t.id} className="flex items-start justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium">{t.name}</span>
+                <Badge variant="muted">/{t.slug}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {t.note_count} note{t.note_count === 1 ? "" : "s"}
+                </span>
+              </div>
+              {t.description && (
+                <p className="mt-0.5 text-sm text-muted-foreground">{t.description}</p>
+              )}
             </div>
-            <button className="btn ghost small" onClick={() => setMergeFrom(t)}>
-              Merge…
-            </button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                setMergeFrom(t);
+                setMergeInto("");
+              }}
+            >
+              <Merge className="h-3.5 w-3.5" /> Merge
+            </Button>
           </li>
         ))}
       </ul>
 
-      {mergeFrom && (
-        <div className="modal-backdrop" onClick={() => setMergeFrom(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="h2">Merge “{mergeFrom.name}” into…</h2>
-            <select className="input" value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
-              <option value="">Choose target tag</option>
-              {tags.filter((t) => t.id !== mergeFrom.id).map((t) => (
-                <option key={t.id} value={t.slug}>{t.name}</option>
+      <Dialog open={!!mergeFrom} onOpenChange={(o) => !o && setMergeFrom(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Merge “{mergeFrom?.name}” into…</DialogTitle>
+            <DialogDescription>
+              All notes tagged “{mergeFrom?.name}” move to the target. Duplicates
+              collapse. “{mergeFrom?.name}” is then deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
+            <option value="">Choose target tag</option>
+            {(tags.data ?? [])
+              .filter((t) => t.id !== mergeFrom?.id)
+              .map((t) => (
+                <option key={t.id} value={t.slug}>
+                  {t.name}
+                </option>
               ))}
-            </select>
-            <p className="muted small">
-              All notes tagged “{mergeFrom.name}” move to the target. Duplicates are
-              collapsed. “{mergeFrom.name}” is then deleted.
-            </p>
-            <div className="row gap">
-              <button className="btn primary" onClick={() => void doMerge()} disabled={!mergeInto}>
-                Merge
-              </button>
-              <button className="btn ghost" onClick={() => setMergeFrom(null)}>Cancel</button>
-            </div>
+          </Select>
+
+          {mergeTag.isError && (
+            <p className="text-sm text-red-400">Merge failed.</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              disabled={!mergeInto || mergeTag.isPending}
+              onClick={() => {
+                if (!mergeFrom) return;
+                mergeTag.mutate(
+                  { id: mergeFrom.id, mergeInto },
+                  { onSuccess: () => setMergeFrom(null) }
+                );
+              }}
+            >
+              {mergeTag.isPending ? "Merging…" : "Merge"}
+            </Button>
+            <Button variant="ghost" onClick={() => setMergeFrom(null)}>
+              Cancel
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

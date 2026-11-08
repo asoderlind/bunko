@@ -1,15 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError } from "./api";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useCreateNote } from "@/queries";
 
 const DRAFT_KEY = "easy-notes.draft";
 
 export default function Scratchpad() {
   const nav = useNavigate();
   const [body, setBody] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [authRequired, setAuthRequired] = useState(false);
+  const create = useCreateNote();
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -22,63 +22,61 @@ export default function Scratchpad() {
     else localStorage.removeItem(DRAFT_KEY);
   }, [body]);
 
-  const save = useCallback(async () => {
-    if (saving) return;
+  const save = useCallback(() => {
+    if (create.isPending) return;
     if (!body.trim()) return; // empty notes are never created
-    setSaving(true);
-    setError(null);
-    try {
-      const note = await api.createNote(body);
-      localStorage.removeItem(DRAFT_KEY);
-      setBody("");
-      nav(`/notes/${note.id}`);
-    } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        setAuthRequired(true);
-      } else {
-        setError("Could not save. Your text is kept in this browser.");
+    create.mutate(
+      { body },
+      {
+        onSuccess: (note) => {
+          localStorage.removeItem(DRAFT_KEY);
+          setBody("");
+          nav(`/notes/${note.id}`);
+        },
       }
-    } finally {
-      setSaving(false);
-    }
-  }, [body, nav, saving]);
+    );
+  }, [body, create, nav]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      void save();
+      save();
     }
   }
 
   const hasText = body.trim().length > 0;
 
   return (
-    <div className="scratchpad">
-      {authRequired && (
-        <div className="banner warn">
-          Not signed in.{" "}
-          <a href="/admin/login/?next=/">Sign in</a> to save notes.
-        </div>
-      )}
-      {error && <div className="banner err">{error}</div>}
-
+    <div className="flex flex-1 flex-col">
       <textarea
         ref={ref}
-        className="scratchpad-input"
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder="Write something…"
         spellCheck={false}
         aria-label="New note"
+        className="min-h-0 flex-1 resize-none bg-transparent px-4 py-5 text-[17px] leading-relaxed outline-none placeholder:text-muted-foreground/60"
       />
 
+      {create.isError && (
+        <p role="alert" className="px-4 pb-2 text-sm text-red-400">
+          Could not save. Your text is kept in this browser.
+        </p>
+      )}
+
       {hasText && (
-        <div className="scratchpad-bar">
-          <button className="btn primary" onClick={() => void save()} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <span className="hint">⌘/Ctrl + Enter</span>
+        <div className="sticky bottom-0 flex items-center gap-3 border-t bg-background px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          <Button onClick={save} disabled={create.isPending}>
+            {create.isPending ? (
+              <>
+                <Loader2 className="animate-spin" /> Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+          <span className="text-sm text-muted-foreground">⌘/Ctrl + Enter</span>
         </div>
       )}
     </div>
