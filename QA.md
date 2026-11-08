@@ -36,6 +36,14 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 - [ ] **Recent notes** are listed under the nav, newest first, capped at 30.
 - [ ] Long titles end in “…” and the tag pills stay pinned to the right.
 - [ ] Tap a note in the sidebar → opens it, row highlights.
+- [ ] On phone the drawer covers ~90% of the width.
+- [ ] First nav entry reads **New note** (it is the scratchpad).
+- [ ] Each note row has a **⋮** button (always visible on touch):
+  - [ ] **Download** → saves `<title>.md` with YAML front matter
+        (title, created, updated, tags).
+  - [ ] **Change title** → dialog, Save renames it in place.
+  - [ ] **Delete** → confirm, then it disappears from the list.
+- [ ] Tapping ⋮ must not open the note.
 
 ### 0c. Tag filter  ← new
 - [ ] Tap **Filter** above the note list to expand it.
@@ -44,6 +52,11 @@ Change that password when you're done (`docker compose -f docker-compose.dev.yml
 - [ ] Ticking a second one filters to notes having **both**.
 - [ ] The count badge on “Filter” shows how many are active; **Clear filters**
       resets.
+
+### 0c2. Note view  ← changed
+- [ ] No Back or Delete buttons at the top of a note — delete lives in the
+      sidebar ⋮ menu.
+- [ ] Tag chips sit at the very top; the title renders above the body.
 
 ### 0d. Generated titles  ← new
 - [ ] Save a note with a long body. The title starts as the first line, then
