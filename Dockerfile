@@ -1,10 +1,19 @@
 # --- frontend build -------------------------------------------------------
 FROM node:22-slim AS frontend
 WORKDIR /fe
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
+
+# pnpm via corepack, pinned by the "packageManager" field in package.json.
+RUN corepack enable
+
+# pnpm blocks lifecycle scripts by default; esbuild needs its postinstall to
+# fetch the platform binary, so approve it non-interactively before install.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile \
+    && pnpm approve-builds esbuild \
+    && pnpm rebuild esbuild
+
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 # --- python runtime -------------------------------------------------------
 FROM python:3.12-slim
@@ -26,8 +35,8 @@ RUN uv pip install --system --no-cache -r pyproject.toml
 
 COPY backend/ /app/
 
-# Built SPA is served by Django from STATICFILES_DIRS / a dedicated dir.
-# Kept outside /app so the dev bind-mount of ./backend:/app doesn't shadow it.
+# Built SPA. Kept outside /app so the dev bind-mount of ./backend:/app
+# doesn't shadow it.
 COPY --from=frontend /fe/dist /spa
 
 EXPOSE 8000
