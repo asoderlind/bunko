@@ -138,6 +138,17 @@ export const api = {
     return request<Page<Note>>(`/notes/${qs ? "?" + qs : ""}`);
   },
 
+  listNotesTree: (
+    p: { q?: string; tag?: string[]; per_folder?: number } = {}
+  ) => {
+    const sp = new URLSearchParams();
+    if (p.q) sp.set("q", p.q);
+    if (p.per_folder) sp.set("per_folder", String(p.per_folder));
+    (p.tag || []).forEach((t) => sp.append("tag", t));
+    const qs = sp.toString();
+    return request<Page<Note>>(`/notes/tree${qs ? "?" + qs : ""}`);
+  },
+
   getNote: (id: string) => request<Note>(`/notes/${id}/`),
 
   createNote: (body_md: string, local_only = false) =>

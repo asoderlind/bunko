@@ -25,6 +25,10 @@ from app.schemas import (
 router = APIRouter(prefix="/notes", tags=["notes"], redirect_slashes=True)
 # Accept both /api/notes and /api/notes/ : the SPA uses the trailing form.
 
+# Below this many characters a note keeps its derived first-line title and is
+# not sent for tagging; above it, a proper title and tags are generated once.
+TITLE_MIN_CHARS = 120
+
 SessionDep = Annotated[Session, Depends(get_session)]
 UserDep = Annotated[AppUser, Depends(current_user)]
 
@@ -141,7 +145,10 @@ def create_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut
         body_md=payload.body_md,
         local_only=payload.local_only,
         folder_id=payload.folder_id,
-        tag_status=TagStatus.PENDING,
+        # Short notes stay out of the queue; they have no real content yet.
+        tag_status=(
+            TagStatus.PENDING if len(payload.body_md.strip()) >= TITLE_MIN_CHARS else TagStatus.DONE
+        ),
     )
     if payload.title is not None and payload.title.strip():
         note.title = payload.title.strip()[:200]
@@ -153,6 +160,52 @@ def create_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut
     session.add(note)
     session.commit()
     return _note_out(_load(session, note.id))
+
+
+@router.get("/tree", response_model=Page[NoteOut])
+def notes_tree(
+    session: SessionDep,
+    _user: UserDep,
+    q: str | None = None,
+    tag: Annotated[list[str] | None, Query()] = None,
+    per_folder: int = 10,
+) -> Page[NoteOut]:
+    """Notes for the sidebar tree, bounded per folder.
+
+    Unfiled notes are capped at `per_folder` like any folder, so a large
+    collection cannot flood the sidebar. Tag and text filters apply across
+    every folder, which is why the filter sits above the folder list.
+    """
+    cap = max(1, min(per_folder, 50))
+
+    stmt = select(Note).options(selectinload(Note.note_tags).selectinload(NoteTag.tag))
+    if tag:
+        for slug in tag:
+            stmt = stmt.where(
+                Note.id.in_(select(NoteTag.note_id).join(Tag).where(Tag.slug == slug))
+            )
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(or_(Note.body_md.ilike(pattern), Note.title.ilike(pattern)))
+
+    rows = session.scalars(stmt.order_by(Note.updated_at.desc())).unique().all()
+
+    # Keep at most `cap` per folder, preserving recency order.
+    kept: list[Note] = []
+    counts: dict[uuid.UUID | None, int] = {}
+    for note in rows:
+        key = note.folder_id
+        if counts.get(key, 0) >= cap:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        kept.append(note)
+
+    return Page[NoteOut](
+        count=len(rows),
+        next=False,
+        previous=False,
+        results=[_note_out(n) for n in kept],
+    )
 
 
 @router.get("/{note_id}", response_model=NoteOut)
@@ -192,9 +245,17 @@ def update_note(
 
     if body_changed:
         note.body_md = data["body_md"]
-        note.tag_status = TagStatus.PENDING
-        note.tag_error = ""
         note.content_revision += 1
+
+        # Requeue tagging when the text is substantial enough for a generated
+        # title and meaningful tags. Below the threshold the derived first line
+        # stays, and nothing is sent to the model for a half-written note.
+        if len(note.body_md.strip()) >= TITLE_MIN_CHARS:
+            note.tag_status = TagStatus.PENDING
+            note.tag_error = ""
+        elif note.tag_status == TagStatus.PENDING:
+            # Still short: keep it pending without spamming the worker.
+            note.tag_error = ""
 
     session.commit()
     return _note_out(_load(session, note.id))

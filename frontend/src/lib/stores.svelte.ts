@@ -207,6 +207,55 @@ class NotesStore {
 export const notes = new NotesStore();
 
 /**
+ * Sidebar tree: notes grouped by folder, so each folder renders its own
+ * children. Filters (text + tags) apply across every folder.
+ */
+class TreeStore {
+  items = $state<Note[]>([]);
+  loading = $state(false);
+  error = $state<string | null>(null);
+  loaded = $state(false);
+
+  /** Notes per folder cap, matching the API default. */
+  perFolder = 10;
+
+  async query(filter: { q?: string; tag?: string[] } = {}) {
+    this.loading = true;
+    this.error = null;
+    try {
+      const page = await api.listNotesTree({ ...filter, per_folder: this.perFolder });
+      this.items = page.results;
+    } catch {
+      this.error = "Could not load notes.";
+      this.items = [];
+    } finally {
+      this.loading = false;
+      this.loaded = true;
+    }
+  }
+
+  /** Notes belonging to one folder (null = unfiled). */
+  inFolder(folderId: string | null): Note[] {
+    return this.items.filter((n) => (n.folder_id ?? null) === folderId);
+  }
+
+  patch(id: string, updater: (n: Note) => Note | null) {
+    this.items = this.items.flatMap((n) => {
+      if (n.id !== id) return [n];
+      const next = updater(n);
+      return next ? [next] : [];
+    });
+  }
+
+  reset() {
+    this.items = [];
+    this.loaded = false;
+  }
+}
+
+export const tree = new TreeStore();
+
+/**
  * Sidebar list: most recent 10 of whatever the sidebar filters select,
  * "Load more" appends 10 more.
  */
