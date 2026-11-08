@@ -13,6 +13,7 @@
 
   let { children } = $props();
 
+
   // Desktop: the rail can be collapsed to give the note full width.
   let collapsed = $state(false);
   // Mobile: the sidebar is an overlay drawer.
@@ -74,16 +75,20 @@
 </script>
 
 <div class="flex min-h-dvh">
-  <!-- Desktop rail, collapsible -->
+  <!--
+    Desktop rail, collapsible. The width (w-72) is written out on both the
+    aside and the inner wrapper; Tailwind needs literal classes, and the two
+    must match or content clips while animating.
+  -->
   <aside
     class="hidden shrink-0 border-r bg-card/40 transition-[width] duration-200 md:block"
-    class:md:w-56={!collapsed}
+    class:md:w-72={!collapsed}
     class:md:w-0={collapsed}
     class:md:border-r-0={collapsed}
     aria-hidden={collapsed}
   >
     <div class="sticky top-0 h-dvh overflow-hidden">
-      <div class="h-full w-56">
+      <div class="h-full w-72">
         <Sidebar />
       </div>
     </div>
