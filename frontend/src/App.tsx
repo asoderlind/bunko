@@ -109,7 +109,8 @@ function Shell({ children }: { children: React.ReactNode }) {
             onClick={() => setDrawer(false)}
             aria-hidden="true"
           />
-          <div className="absolute inset-y-0 left-0 w-64 border-r bg-card shadow-xl">
+          {/* 90% of the viewport on phones; the rail takes over at md. */}
+          <div className="absolute inset-y-0 left-0 w-[90%] border-r bg-card shadow-xl">
             <SidebarNav onNavigate={() => setDrawer(false)} />
           </div>
         </div>

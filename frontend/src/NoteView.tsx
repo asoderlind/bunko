@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TagPill } from "@/components/tag-colors";
@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { ApiError, TagStatus } from "@/api";
 import {
   useAddNoteTag,
-  useDeleteNote,
   useNote,
   useNoteTags,
   useRemoveNoteTag,
@@ -38,7 +37,6 @@ function StatusBadge({ status, error }: { status: TagStatus; error?: string }) {
 
 export default function NoteView() {
   const { id } = useParams<{ id: string }>();
-  const nav = useNavigate();
   const note = useNote(id);
   const tagsQ = useNoteTags(
     id,
@@ -54,7 +52,6 @@ export default function NoteView() {
   const addTag = useAddNoteTag(id ?? "");
   const removeTag = useRemoveNoteTag(id ?? "");
   const update = useUpdateNote(id ?? "");
-  const del = useDeleteNote();
 
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState("");
@@ -104,11 +101,6 @@ export default function NoteView() {
     );
   }
 
-  function onDelete() {
-    if (!confirm("Delete this note?")) return;
-    del.mutate(n.id, { onSuccess: () => nav("/", { replace: true }) });
-  }
-
   const addTagError =
     addTag.error instanceof ApiError && addTag.error.status === 400
       ? "That tag does not exist."
@@ -118,17 +110,6 @@ export default function NoteView() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-4">
-      <div className="mb-3 flex items-center justify-between">
-        <Button variant="ghost" asChild className="-ml-2 px-2">
-          <Link to="/">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Link>
-        </Button>
-        <Button variant="ghost" className="text-red-400" onClick={onDelete}>
-          Delete
-        </Button>
-      </div>
-
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <StatusBadge status={status} error={errorText} />
 
