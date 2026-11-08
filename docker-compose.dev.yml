@@ -1,0 +1,85 @@
+# Development compose for easy-notes.
+#
+# Ollama is NOT a service here: the model runs on the MacBook over the tailnet.
+# Point OLLAMA_BASE_URL at it in .env.
+#
+# Usage:
+#   cp .env.example .env   # then edit
+#   docker compose -f docker-compose.dev.yml up -d --build
+#
+# Ports bind to the tailnet address only (see BIND_HOST), so the app is not
+# reachable from the LAN or the internet -- just from your tailnet devices.
+
+name: easy-notes
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-easy_notes}
+      POSTGRES_USER: ${POSTGRES_USER:-easy_notes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-easy_notes} -d ${POSTGRES_DB:-easy_notes}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # Not published: only reachable on the compose network. Use
+    # `docker compose -f docker-compose.dev.yml exec postgres psql ...` for a shell.
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120 --reload"
+    restart: unless-stopped
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: postgres://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
+    volumes:
+      # Bind-mount source so runserver/reload picks up edits without a rebuild.
+      - ./backend:/app
+    ports:
+      - "${BIND_HOST:-100.113.71.15}:${WEB_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py run_tagging_worker
+    restart: unless-stopped
+    # Give the worker time to finish an in-flight job on shutdown
+    # (spec 6: SIGTERM must finish the current job, not abandon it).
+    stop_grace_period: 150s
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: postgres://${POSTGRES_USER:-easy_notes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-easy_notes}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,100.113.71.15}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
