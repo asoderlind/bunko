@@ -7,12 +7,14 @@ RUN corepack enable
 
 # pnpm blocks lifecycle scripts by default; esbuild needs its postinstall to
 # fetch the platform binary, so approve it non-interactively before install.
-COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/svelte.config.js frontend/vite.config.ts frontend/tsconfig.json ./
+
 RUN pnpm install --frozen-lockfile \
     && pnpm approve-builds esbuild \
     && pnpm rebuild esbuild
 
 COPY frontend/ ./
+RUN pnpm exec svelte-kit sync
 RUN pnpm run build
 
 # --- python runtime -------------------------------------------------------
@@ -37,7 +39,7 @@ COPY backend/ /app/
 
 # Built SPA. Kept outside /app so the dev bind-mount of ./backend:/app
 # doesn't shadow it.
-COPY --from=frontend /fe/dist /spa
+COPY --from=frontend /fe/build /spa
 
 EXPOSE 8000
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]

@@ -39,15 +39,6 @@ class NoteViewSet(viewsets.ModelViewSet):
         if tag_status:
             qs = qs.filter(tag_status=tag_status)
 
-        # Sidebar wants a bounded, ordered slice rather than a full page.
-        limit = params.get("limit")
-        if limit:
-            try:
-                n = max(1, min(int(limit), 200))
-            except (TypeError, ValueError):
-                n = 50
-            return qs.order_by("-updated_at")[:n]
-
         q = params.get("q")
         if q:
             vector = SearchVector("body_md", "title", config="english")
@@ -59,6 +50,48 @@ class NoteViewSet(viewsets.ModelViewSet):
             )
 
         return qs
+
+    def paginate_queryset(self, queryset):
+        """Support ?limit=N&offset=M for the sidebar's incremental loading.
+
+        Offset paging is stable here because the list is ordered by
+        updated_at, which only changes when a note is edited.
+        """
+        params = self.request.query_params
+        if "limit" not in params and "offset" not in params:
+            return super().paginate_queryset(queryset)
+
+        try:
+            limit = max(1, min(int(params.get("limit", 20)), 200))
+        except (TypeError, ValueError):
+            limit = 20
+        try:
+            offset = max(0, int(params.get("offset", 0)))
+        except (TypeError, ValueError):
+            offset = 0
+
+        self.pagination_class = None
+        self._window = {
+            "count": queryset.count(),
+            "limit": limit,
+            "offset": offset,
+            "page": list(queryset[offset : offset + limit]),
+        }
+        return self._window["page"]
+
+    def get_paginated_response(self, data):
+        window = getattr(self, "_window", None)
+        if window is None:
+            return super().get_paginated_response(data)
+        end = window["offset"] + window["limit"]
+        return Response(
+            {
+                "count": window["count"],
+                "next": end < window["count"],
+                "previous": window["offset"] > 0,
+                "results": data,
+            }
+        )
 
     @action(detail=True, methods=["get", "post"])
     def tags(self, request, pk=None):

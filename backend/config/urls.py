@@ -16,8 +16,10 @@ urlpatterns = [
 if settings.SPA_DIR.exists():
     urlpatterns += [
         # `serve` reads the URL kwarg named `path`, so capture it as such.
-        path("assets/<path:path>", serve, {"document_root": settings.SPA_DIR / "assets"}),
+        # SvelteKit puts hashed assets under /_app.
+        path("_app/<path:path>", serve, {"document_root": settings.SPA_DIR / "_app"}),
         path("manifest.webmanifest", serve, {"document_root": settings.SPA_DIR, "path": "manifest.webmanifest"}),
+        path("favicon.png", serve, {"document_root": settings.SPA_DIR, "path": "favicon.png"}),
         # Client-side routes (/notes/:id, /tags, /inbox) fall back to the shell.
         path("<path:route>", spa_index),
         path("", spa_index),

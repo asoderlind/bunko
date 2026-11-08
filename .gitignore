@@ -19,3 +19,7 @@ dist/
 # Build artifacts
 *.tsbuildinfo
 frontend/dist/
+
+# SvelteKit
+frontend/.svelte-kit/
+frontend/build/

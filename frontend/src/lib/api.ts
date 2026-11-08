@@ -42,18 +42,19 @@ export type Tag = {
 
 export type User = { id: number; username: string };
 
-export type Paginated<T> = {
+export type Page<T> = {
   count: number;
-  next: string | null;
-  previous: string | null;
+  next: boolean | string | null;
+  previous: boolean | string | null;
   results: T[];
 };
 
 const BASE = "/api";
 
 function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[2]) : null;
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[2]) : null;
 }
 
 export class ApiError extends Error {
@@ -86,56 +87,43 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
 
   if (res.status === 204) return undefined as T;
-
   const text = await res.text();
   const body = text ? safeJson(text) : null;
   if (!res.ok) throw new ApiError(res.status, body);
   return body as T;
 }
 
-function safeJson(text: string): unknown {
+function safeJson(t: string): unknown {
   try {
-    return JSON.parse(text);
+    return JSON.parse(t);
   } catch {
-    return text;
+    return t;
   }
 }
 
 export const api = {
-  // --- auth ---
   me: () => request<User | null>("/user/"),
   login: (password: string) =>
-    request<User>("/auth/login/", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
+    request<User>("/auth/login/", { method: "POST", body: JSON.stringify({ password }) }),
   logout: () => request<void>("/auth/logout/", { method: "POST" }),
 
-  // --- notes ---
   listNotes: (
-    params: {
-      q?: string;
-      tag?: string[];
-      tag_status?: string;
-      limit?: number;
-    } = {}
+    p: { q?: string; tag?: string[]; tag_status?: string; limit?: number; offset?: number } = {}
   ) => {
     const sp = new URLSearchParams();
-    if (params.q) sp.set("q", params.q);
-    if (params.tag_status) sp.set("tag_status", params.tag_status);
-    if (params.limit) sp.set("limit", String(params.limit));
-    (params.tag || []).forEach((t) => sp.append("tag", t));
+    if (p.q) sp.set("q", p.q);
+    if (p.tag_status) sp.set("tag_status", p.tag_status);
+    if (p.limit) sp.set("limit", String(p.limit));
+    if (p.offset) sp.set("offset", String(p.offset));
+    (p.tag || []).forEach((t) => sp.append("tag", t));
     const qs = sp.toString();
-    return request<Paginated<Note>>(`/notes/${qs ? "?" + qs : ""}`);
+    return request<Page<Note>>(`/notes/${qs ? "?" + qs : ""}`);
   },
 
   getNote: (id: string) => request<Note>(`/notes/${id}/`),
 
   createNote: (body_md: string, local_only = false) =>
-    request<Note>("/notes/", {
-      method: "POST",
-      body: JSON.stringify({ body_md, local_only }),
-    }),
+    request<Note>("/notes/", { method: "POST", body: JSON.stringify({ body_md, local_only }) }),
 
   updateNote: (id: string, patch: Partial<Pick<Note, "body_md" | "title" | "local_only">>) =>
     request<Note>(`/notes/${id}/`, { method: "PATCH", body: JSON.stringify(patch) }),
@@ -153,8 +141,7 @@ export const api = {
   removeNoteTag: (id: string, tagId: string) =>
     request<TagsResponse>(`/notes/${id}/tags/${tagId}/`, { method: "DELETE" }),
 
-  // --- tags ---
-  listTags: () => request<Paginated<Tag>>("/tags/"),
+  listTags: () => request<Page<Tag>>("/tags/"),
 
   createTag: (data: { slug: string; name: string; description?: string }) =>
     request<Tag>("/tags/", { method: "POST", body: JSON.stringify(data) }),
@@ -162,14 +149,10 @@ export const api = {
   updateTag: (
     id: string,
     data: Partial<{ slug: string; name: string; description: string; color: string }>
-  ) =>
-    request<Tag>(`/tags/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  ) => request<Tag>(`/tags/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 
   mergeTag: (id: string, merge_into: string) =>
-    request<Tag>(`/tags/${id}/merge/`, {
-      method: "POST",
-      body: JSON.stringify({ merge_into }),
-    }),
+    request<Tag>(`/tags/${id}/merge/`, { method: "POST", body: JSON.stringify({ merge_into }) }),
 };
 
 export const slugify = (s: string) =>

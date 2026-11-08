@@ -1,17 +1,12 @@
+import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
 
-// Dev: proxy /api and /admin to Django so the SPA is same-origin,
-// which keeps session cookies + CSRF working without CORS.
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
-  },
+  plugins: [sveltekit()],
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Dev: same-origin proxy to Django so session + CSRF work.
     proxy: {
       "/api": { target: "http://web:8000", changeOrigin: false },
       "/admin": { target: "http://web:8000", changeOrigin: false },
