@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     session_max_age: int = 60 * 60 * 24 * 30
 
     debug: bool = True
-    allowed_hosts: str = "localhost,127.0.0.1,100.113.71.15"
+    allowed_hosts: str = "localhost,127.0.0.1"
 
     # Built SvelteKit output, served by this app.
     spa_dir: Path = Path("/spa")

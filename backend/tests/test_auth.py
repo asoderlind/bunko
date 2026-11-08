@@ -1,5 +1,11 @@
 """Password hashing and session token round-trip."""
 
+import os
+
+# Test-only credential. Override with EASY_NOTES_TEST_PASSWORD if you prefer;
+# it never has to match a real deployment.
+TEST_PASSWORD = os.environ.get("EASY_NOTES_TEST_PASSWORD", "test-password-not-a-real-secret")
+
 
 def _auth():
     """Imported lazily: a bad SECRET_KEY makes the import itself raise."""
@@ -10,8 +16,8 @@ def _auth():
 
 def test_password_roundtrip():
     auth = _auth()
-    h = auth.hash_password("changeme-qa-only")
-    assert auth.verify_password(h, "changeme-qa-only")
+    h = auth.hash_password(TEST_PASSWORD)
+    assert auth.verify_password(h, TEST_PASSWORD)
     assert not auth.verify_password(h, "wrong")
 
 

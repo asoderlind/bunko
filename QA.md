@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| **URL** | http://100.113.71.15:8000 |
+| **URL** | whatever you set `BIND_HOST` to, e.g. `http://<host>:8000` |
 | **Password** | see below — temporary, set for this QA pass |
-| **Tailnet only** | bound to `100.113.71.15`; not on LAN or internet |
+| **Reachability** | bound to `BIND_HOST`; `127.0.0.1` by default |
 
 You land on a password screen — no username, just the password.
 On iPhone: Share → **Add to Home Screen** to test standalone/PWA mode.
@@ -150,8 +150,8 @@ sg docker -c "docker compose -f docker-compose.dev.yml logs -f web worker"
 Health probes:
 
 ```bash
-curl -s http://100.113.71.15:8000/health   # liveness
-curl -s http://100.113.71.15:8000/ready    # liveness + database
+curl -s http://localhost:8000/health   # liveness
+curl -s http://localhost:8000/ready    # liveness + database
 ```
 
 Worker stuck, or want a clean queue:
