@@ -8,6 +8,7 @@
   import { tagStyle } from "$lib/tag-colors";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
+  import { header } from "$lib/header.svelte";
 
   const id = $derived($page.params.id!);
   const store = createNoteStore();
@@ -30,6 +31,13 @@
   $effect(() => {
     const current = id;
     if (current) void store.load(current);
+  });
+
+  // Put this note's title in the shell's top bar.
+  $effect(() => {
+    const n = store.note;
+    header.set(n ? n.title || "(untitled)" : "");
+    return () => header.clear();
   });
 
   // Reset the editor when the route changes to a different note.
@@ -116,7 +124,7 @@
   </div>
 {:else}
   {@const n = store.note}
-  <div class="mx-auto w-full max-w-3xl px-4 py-4">
+  <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-3">
     <!-- Top row: actions menu on the right. -->
     <div class="mb-3 flex items-start justify-between gap-2">
       <div class="flex flex-wrap items-center gap-1.5">
@@ -201,9 +209,6 @@
       No separate view/edit mode: the body is the editor. The title is shown
       read-only here; it is changed only from the sidebar's three-dots menu.
     -->
-    <h2 class="mb-1 text-lg font-semibold tracking-tight">
-      {n.title || "(untitled)"}
-    </h2>
     <p class="mb-2 text-xs text-muted-foreground">
       {n.title_source === "user"
         ? "Title set by you."
@@ -219,7 +224,7 @@
       spellcheck="false"
       aria-label="Note body"
       placeholder="Write something…"
-      class="min-h-[50vh] w-full resize-none border-0 bg-transparent p-0 text-[16px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
+      class="min-h-40 w-full flex-1 resize-none border-0 bg-transparent p-0 text-[16px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
     ></textarea>
 
     <div class="flex min-h-11 items-center gap-3 border-t pt-2 text-sm text-muted-foreground">

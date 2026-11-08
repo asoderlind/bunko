@@ -1,6 +1,7 @@
 <script lang="ts">
   import Sidebar from "./Sidebar.svelte";
   import { page } from "$app/stores";
+  import { header } from "$lib/header.svelte";
   import {
     Menu,
     PanelLeftClose,
@@ -103,8 +104,9 @@
   {/if}
 
   <div class="flex min-w-0 flex-1 flex-col">
+    <!-- Fixed height: the app bar and any page bar line up exactly. -->
     <header
-      class="sticky top-0 z-30 flex items-center gap-1 border-b bg-background/95 px-2 py-1.5 backdrop-blur"
+      class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-1 border-b bg-background/95 px-2 backdrop-blur"
     >
       <!-- Mobile: open the drawer -->
       <button
@@ -131,7 +133,20 @@
       </button>
 
       <span class="px-2 text-sm font-semibold tracking-tight md:hidden">easy-notes</span>
-      <div class="ml-auto">
+
+      <!-- Room for the current page's title, set by the page itself. -->
+      {#if header.title}
+        <div class="mx-2 min-w-0">
+          <div class="truncate text-sm font-medium leading-tight">{header.title}</div>
+          {#if header.subtitle}
+            <div class="truncate text-xs leading-tight text-muted-foreground">
+              {header.subtitle}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <div class="ml-auto flex shrink-0 items-center">
         <button
           class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           onclick={() => (searching = true)}
