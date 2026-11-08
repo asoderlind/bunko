@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TagPill } from "@/components/tag-colors";
-import { Select } from "@/components/ui/select";
+import { TagPill, tagStyle } from "@/components/tag-colors";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApiError, TagStatus } from "@/api";
 import {
   useAddNoteTag,
@@ -126,19 +131,31 @@ export default function NoteView() {
         ))}
 
         {!tagging && available.length > 0 && (
-          <Select
-            className="h-8 w-auto min-w-24 px-2 text-xs"
-            value=""
-            onChange={(e) => e.target.value && addTag.mutate({ id: n.id, slug: e.target.value })}
-            aria-label="Add tag"
-          >
-            <option value="">+ tag</option>
-            {available.map((t) => (
-              <option key={t.id} value={t.slug}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2.5 text-xs text-muted-foreground transition-colors hover:border-muted-foreground/70 hover:text-foreground"
+                aria-label="Add tag"
+              >
+                <Plus className="h-3 w-3" />
+                tag
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {available.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  onSelect={() => addTag.mutate({ id: n.id, slug: t.slug })}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${tagStyle(t.color).dot}`}
+                    aria-hidden="true"
+                  />
+                  {t.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
