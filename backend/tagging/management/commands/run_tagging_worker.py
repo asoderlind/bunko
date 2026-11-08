@@ -152,8 +152,8 @@ class Command(BaseCommand):
                 payload = client.call_provider(
                     profile, system_prompt, body, settings.TAGGING_REQUEST_TIMEOUT
                 )
-                valid, _none_apply = client.parse_tag_response(payload, allowed)
-                self.complete(claimed, valid, None)
+                valid, _none_apply, title = client.parse_tag_response(payload, allowed)
+                self.complete(claimed, valid, None, title=title)
                 return
             except client.ValidationError_ as exc:
                 last_error = f"invalid model output: {exc}"
@@ -164,7 +164,7 @@ class Command(BaseCommand):
 
         self.fail(claimed, (last_error or "tagging failed")[:200])
 
-    def complete(self, claimed, valid_tags, error):
+    def complete(self, claimed, valid_tags, error, title: str | None = None):
         """Write results, but only if the note wasn't edited meanwhile."""
         with transaction.atomic():
             note = Note.objects.select_for_update().filter(pk=claimed["id"]).first()
@@ -208,9 +208,18 @@ class Command(BaseCommand):
                 tag.usage_count = tag.note_tags.count()
                 tag.save(update_fields=["usage_count"])
 
+            update_fields = ["tag_status", "tag_error"]
+
+            # Only replace a title the machine produced; never clobber one the
+            # user typed themselves.
+            if title and note.title_source != Note.TitleSource.USER:
+                note.title = title[:200]
+                note.title_source = Note.TitleSource.GENERATED
+                update_fields += ["title", "title_source"]
+
             note.tag_status = Note.TagStatus.DONE
             note.tag_error = error or ""
-            note.save(update_fields=["tag_status", "tag_error"])
+            note.save(update_fields=update_fields)
         log.info(
             "note %s done with %s tag(s): %s",
             claimed["id"],

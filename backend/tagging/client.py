@@ -14,6 +14,10 @@ Choose tags ONLY from this closed list. Each line is: slug - description
 
 {tag_list}
 
+Also propose a short title for the note: at most 60 characters, plain text,
+no trailing full stop, no markdown. It should say what the note is about, not
+repeat its first line verbatim. Use the same language as the note.
+
 Hard rules:
 - Use only slugs from the list above. Never invent a tag.
 - Return between 0 and 5 tags.
@@ -43,8 +47,9 @@ JSON_SCHEMA = {
                 },
             },
             "none_apply": {"type": "boolean"},
+            "title": {"type": "string"},
         },
-        "required": ["tags", "none_apply"],
+        "required": ["tags", "none_apply", "title"],
         "additionalProperties": False,
     },
 }
@@ -73,8 +78,10 @@ def truncate_body(body: str, limit: int) -> str:
     return body[:limit]
 
 
-def parse_tag_response(payload: dict, allowed_slugs: set[str]) -> tuple[list[dict], bool]:
-    """Validate model output. Returns (valid_tags, none_apply).
+def parse_tag_response(
+    payload: dict, allowed_slugs: set[str]
+) -> tuple[list[dict], bool, str | None]:
+    """Validate model output. Returns (valid_tags, none_apply, title).
 
     Unknown slugs are dropped silently (spec 6). Malformed structure raises
     ValidationError_ so the caller can retry once.
@@ -90,6 +97,13 @@ def parse_tag_response(payload: dict, allowed_slugs: set[str]) -> tuple[list[dic
         raise ValidationError_("`none_apply` missing or not a boolean")
     if len(tags) > 5:
         raise ValidationError_("More than 5 tags returned")
+
+    raw_title = payload.get("title")
+    title: str | None = None
+    if isinstance(raw_title, str):
+        cleaned = " ".join(raw_title.split()).strip().rstrip(".")
+        if cleaned:
+            title = cleaned[:200]
 
     valid: list[dict] = []
     seen: set[str] = set()
@@ -109,7 +123,7 @@ def parse_tag_response(payload: dict, allowed_slugs: set[str]) -> tuple[list[dic
         seen.add(slug)
         valid.append({"slug": slug, "confidence": float(confidence)})
 
-    return valid, none_apply
+    return valid, none_apply, title
 
 
 def _extract_json(content: str):

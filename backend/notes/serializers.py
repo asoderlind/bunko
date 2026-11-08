@@ -10,13 +10,13 @@ class TagSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tag
-        fields = ["id", "slug", "name", "description", "note_count"]
+        fields = ["id", "slug", "name", "description", "color", "note_count"]
 
 
 class TagWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
-        fields = ["id", "slug", "name", "description"]
+        fields = ["id", "slug", "name", "description", "color"]
         read_only_fields = ["id"]
 
     def validate_slug(self, value):
@@ -31,10 +31,11 @@ class NoteTagSerializer(serializers.ModelSerializer):
     tag_id = serializers.UUIDField(source="tag.id", read_only=True)
     slug = serializers.CharField(source="tag.slug", read_only=True)
     name = serializers.CharField(source="tag.name", read_only=True)
+    color = serializers.CharField(source="tag.color", read_only=True)
 
     class Meta:
         model = NoteTag
-        fields = ["id", "tag_id", "slug", "name", "source", "confidence"]
+        fields = ["id", "tag_id", "slug", "name", "color", "source", "confidence"]
 
 
 class NoteSerializer(serializers.ModelSerializer):
@@ -42,6 +43,7 @@ class NoteSerializer(serializers.ModelSerializer):
     tag_status = serializers.CharField(read_only=True)
     tag_error = serializers.CharField(read_only=True)
     title = serializers.CharField(required=False, allow_blank=True)
+    title_source = serializers.CharField(read_only=True)
 
     class Meta:
         model = Note
@@ -49,6 +51,7 @@ class NoteSerializer(serializers.ModelSerializer):
             "id",
             "body_md",
             "title",
+            "title_source",
             "tags",
             "tag_status",
             "tag_error",
@@ -77,11 +80,24 @@ class NoteSerializer(serializers.ModelSerializer):
             setattr(instance, key, value)
 
         update_fields = list(validated_data.keys())
-        if body_changed and not validated_data.get("title"):
-            # Body changed and the user didn't set a title: re-derive it so the
-            # title doesn't go stale. (save() only derives when title is empty.)
+
+        # An explicit title is the user's; remember that so the tagging worker
+        # never overwrites it, and so a later body edit doesn't discard it.
+        if "title" in validated_data:
+            if validated_data["title"].strip():
+                instance.title_source = Note.TitleSource.USER
+            else:
+                # Cleared on purpose: fall back to derived, allow regeneration.
+                instance.title_source = Note.TitleSource.DERIVED
+                instance.title = instance.derive_title()
+                update_fields += ["title", "title_source"]
+            update_fields.append("title_source")
+        elif body_changed and instance.title_source != Note.TitleSource.USER:
+            # Body changed and the title isn't the user's: show the derived one
+            # immediately, and let the worker replace it with a generated one.
             instance.title = instance.derive_title()
-            update_fields.append("title")
+            instance.title_source = Note.TitleSource.DERIVED
+            update_fields += ["title", "title_source"]
         if body_changed:
             # Requeue tagging and bump the revision so any in-flight worker
             # result is discarded rather than written over the new body.

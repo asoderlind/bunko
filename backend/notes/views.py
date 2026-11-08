@@ -39,6 +39,15 @@ class NoteViewSet(viewsets.ModelViewSet):
         if tag_status:
             qs = qs.filter(tag_status=tag_status)
 
+        # Sidebar wants a bounded, ordered slice rather than a full page.
+        limit = params.get("limit")
+        if limit:
+            try:
+                n = max(1, min(int(limit), 200))
+            except (TypeError, ValueError):
+                n = 50
+            return qs.order_by("-updated_at")[:n]
+
         q = params.get("q")
         if q:
             vector = SearchVector("body_md", "title", config="english")
