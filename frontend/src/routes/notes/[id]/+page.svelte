@@ -4,7 +4,7 @@
   import { Loader2, Plus } from "lucide-svelte";
   import { DropdownMenu } from "bits-ui";
   import { api, ApiError } from "$lib/api";
-  import { createNoteStore, folders, notes, sidebarNotes, tags } from "$lib/stores.svelte";
+  import { createNoteStore, notes, sidebarNotes, tags } from "$lib/stores.svelte";
   import { tagStyle } from "$lib/tag-colors";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
@@ -22,7 +22,6 @@
 
   onMount(() => {
     if (!tags.loaded) void tags.load();
-    if (!folders.loaded) void folders.load();
     return () => store.dispose();
   });
 
@@ -80,18 +79,6 @@
     } finally {
       saving = false;
     }
-  }
-
-  async function moveToFolder(folderId: string) {
-    const current = store.note;
-    if (!current) return;
-    const updated = await api.updateNote(current.id, {
-      folder_id: folderId || null,
-    });
-    store.setNote(updated);
-    notes.patch(updated.id, (n) => ({ ...n, folder_id: updated.folder_id }));
-    sidebarNotes.patch(updated.id, (n) => ({ ...n, folder_id: updated.folder_id }));
-    void folders.load();
   }
 
   async function addTag(slug: string) {
@@ -179,21 +166,8 @@
         {/if}
       </div>
 
+      <!-- Note view: download only. Title, folder and delete live in the sidebar. -->
       <div class="flex shrink-0 items-center gap-1">
-        <!-- Folder picker: moving a note never changes its content or tags. -->
-        <select
-          class="h-8 max-w-36 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground"
-          aria-label="Folder"
-          value={n.folder_id ?? ""}
-          onchange={(e) => void moveToFolder(e.currentTarget.value)}
-        >
-          <option value="">No folder</option>
-          {#each folders.items as f (f.id)}
-            <option value={f.id}>{f.name}</option>
-          {/each}
-        </select>
-
-        <!-- Note view: download only. Title and delete live in the sidebar menu. -->
         <NoteActions note={n} align="end" compact />
       </div>
     </div>
@@ -204,17 +178,6 @@
     {#if status === "failed" && errorText}
       <p class="mb-2 text-sm text-muted-foreground">{errorText}</p>
     {/if}
-
-    <!--
-      No separate view/edit mode: the body is the editor. The title is shown
-      read-only here; it is changed only from the sidebar's three-dots menu.
-    -->
-    <p class="mb-2 text-xs text-muted-foreground">
-      {n.title_source === "user"
-        ? "Title set by you."
-        : "Title is generated from the note."}
-      Change it from the sidebar menu.
-    </p>
 
     <textarea
       bind:value={body}

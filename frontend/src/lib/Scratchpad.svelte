@@ -1,77 +1,130 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { page } from "$app/stores";
-  import { api } from "$lib/api";
+  import { api, type Note } from "$lib/api";
+  import { header } from "$lib/header.svelte";
   import { sidebarNotes } from "$lib/stores.svelte";
 
-  const DRAFT_KEY = "easy-notes.draft";
-
+  /**
+   * New-note composer. Same editing surface as the note view: a borderless
+   * full-height textarea, autosaved. The note is created on the first keystroke
+   * (so it appears in the sidebar) and then patched as you type, which means
+   * tagging starts early and finishes sooner.
+   */
   let body = $state("");
   let saving = $state(false);
-  let error = $state<string | null>(null);
-  let textarea: HTMLTextAreaElement;
+  let saveError = $state<string | null>(null);
+  let textarea = $state<HTMLTextAreaElement | null>(null);
+
+  // The note we have already created in this session, if any.
+  let created: Note | null = null;
+  let pending = $state(false);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    header.set(created ? created.title || "(untitled)" : "New note");
+    return () => header.clear();
+  });
 
   onMount(() => {
-    body = localStorage.getItem(DRAFT_KEY) || "";
     textarea?.focus();
   });
 
-  $effect(() => {
-    if (body) localStorage.setItem(DRAFT_KEY, body);
-    else localStorage.removeItem(DRAFT_KEY);
-  });
+  // The newest text seen, so a save that finishes mid-typing can follow up
+  // with whatever arrived meanwhile instead of dropping those keystrokes.
+  let latest = "";
 
-  async function save() {
-    if (saving || !body.trim()) return;
+  /** Create on first content, then patch. Debounced so typing stays smooth. */
+  async function persist(value: string) {
+    latest = value;
+    if (!value.trim()) return;
+    if (pending) return;
+
+    pending = true;
     saving = true;
-    error = null;
+    saveError = null;
     try {
-      const note = await api.createNote(body);
-      localStorage.removeItem(DRAFT_KEY);
-      body = "";
-      void sidebarNotes.query();
-      await goto(`/notes/${note.id}`);
+      // Loop until no newer text arrived while we were saving.
+      let target = value;
+      while (target.trim()) {
+        if (!created) {
+          created = await api.createNote(target);
+          void sidebarNotes.query();
+          // Swap the URL to the real note without remounting this editor.
+          history.replaceState({}, "", `/notes/${created.id}`);
+        } else {
+          created = await api.updateNote(created.id, { body_md: target });
+          sidebarNotes.patch(created.id, () => created!);
+        }
+        if (latest === target) break;
+        target = latest;
+      }
     } catch {
-      error = "Could not save. Your text is kept in this browser.";
+      saveError = "Could not save.";
     } finally {
+      pending = false;
       saving = false;
     }
   }
 
+  function oninput() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void persist(body), 800);
+  }
+
+  function onblur() {
+    if (timer) clearTimeout(timer);
+    void persist(body);
+  }
+
   function onkeydown(e: KeyboardEvent) {
+    // ⌘/Ctrl+Enter still finishes immediately and opens the note properly.
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      void save();
+      if (timer) clearTimeout(timer);
+      void finish();
     }
+  }
+
+  async function finish() {
+    if (!body.trim()) return;
+    if (!created) await persist(body);
+    if (created) await goto(`/notes/${created.id}`, { replaceState: true });
   }
 </script>
 
-<div class="flex flex-1 flex-col">
+<div class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-3">
   <textarea
     bind:this={textarea}
     bind:value={body}
+    {oninput}
+    {onblur}
     {onkeydown}
-    placeholder="Write something…"
     spellcheck="false"
-    aria-label="New note"
-    class="min-h-0 flex-1 resize-none bg-transparent px-4 py-5 text-[17px] leading-relaxed outline-none placeholder:text-muted-foreground/60"
+    aria-label="New note body"
+    placeholder="Write something…"
+    class="min-h-40 w-full flex-1 resize-none border-0 bg-transparent p-0 text-[16px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
   ></textarea>
 
-  {#if error}
-    <p role="alert" class="px-4 pb-2 text-sm text-red-400">{error}</p>
-  {/if}
-
-  {#if body.trim()}
-    <div class="sticky bottom-0 flex items-center gap-3 border-t bg-background px-4 py-2.5">
+  <div class="flex min-h-11 items-center gap-3 border-t pt-2 text-sm text-muted-foreground">
+    {#if saving}
+      Saving…
+    {:else if saveError}
+      <span class="text-red-400">{saveError}</span>
+    {:else if body.trim()}
+      Saved
+    {:else}
+      Nothing to save yet
+    {/if}
+    {#if body.trim()}
       <button
-        onclick={() => void save()}
-        disabled={saving}
-        class="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        class="ml-auto text-xs text-muted-foreground hover:text-foreground"
+        onclick={() => void finish()}
       >
-        {saving ? "Saving…" : "Save"}
+        Open note
       </button>
-      <span class="text-sm text-muted-foreground">⌘/Ctrl + Enter</span>
-    </div>
-  {/if}
+    {:else}
+      <span class="ml-auto text-xs">⌘/Ctrl + Enter</span>
+    {/if}
+  </div>
 </div>
