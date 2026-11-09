@@ -5,6 +5,7 @@
 @layer base {
   :root {
     --background: 240 6% 6%;
+    --note-bg: 240 6% 6%;
     --foreground: 0 0% 96%;
     --card: 240 5% 9%;
     --card-foreground: 0 0% 96%;
@@ -83,5 +84,105 @@
   }
   .scrollbar-hidden::-webkit-scrollbar {
     display: none;
+  }
+
+  /* CodeMirror Markdown editor: full-height, transparent, no gutters. */
+  .markdown-editor {
+    --cm-pad-x: 1rem;
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    .markdown-editor {
+      --cm-pad-x: 2rem;
+    }
+  }
+  .markdown-editor .cm-editor {
+    height: 100%;
+    background-color: transparent;
+  }
+  .markdown-editor .cm-scroller {
+    background-color: transparent;
+  }
+  .markdown-editor .cm-scroller {
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .markdown-editor .cm-scroller::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .markdown-editor .cm-scroller::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .markdown-editor .cm-scroller::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  /* Rendered Markdown preview. */
+  .markdown-body {
+    @apply text-[16px] leading-relaxed text-foreground/90;
+  }
+  .markdown-body > :first-child {
+    margin-top: 0;
+  }
+  .markdown-body > :last-child {
+    margin-bottom: 0;
+  }
+  .markdown-body h1 {
+    @apply mb-3 mt-6 text-xl font-semibold tracking-tight;
+  }
+  .markdown-body h2 {
+    @apply mb-2 mt-5 text-lg font-semibold tracking-tight;
+  }
+  .markdown-body h3,
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
+    @apply mb-2 mt-4 text-base font-semibold;
+  }
+  .markdown-body p {
+    @apply my-3;
+  }
+  .markdown-body ul {
+    @apply my-3 list-disc pl-6;
+  }
+  .markdown-body ol {
+    @apply my-3 list-decimal pl-6;
+  }
+  .markdown-body li {
+    @apply my-1;
+  }
+  .markdown-body blockquote {
+    @apply my-3 border-l-2 border-border pl-3 text-muted-foreground;
+  }
+  .markdown-body a {
+    @apply text-primary underline underline-offset-2;
+  }
+  .markdown-body code {
+    @apply rounded bg-muted px-1 py-0.5 text-[0.9em];
+  }
+  .markdown-body pre {
+    @apply my-3 overflow-x-auto rounded-lg border bg-card p-3 text-sm;
+  }
+  .markdown-body pre code {
+    @apply bg-transparent p-0 text-[0.95em];
+  }
+  .markdown-body img {
+    @apply my-3 max-w-full rounded-lg border;
+  }
+  .markdown-body table {
+    @apply my-3 w-full border-collapse text-sm;
+  }
+  .markdown-body th,
+  .markdown-body td {
+    @apply border border-border px-2 py-1 text-left align-top;
+  }
+  .markdown-body hr {
+    @apply my-5 border-border;
+  }
+  .markdown-body input[type="checkbox"] {
+    @apply mr-1 align-middle;
   }
 }

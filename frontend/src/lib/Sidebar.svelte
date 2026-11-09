@@ -1,18 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { Popover } from "bits-ui";
   import {
     ChevronDown,
     ChevronRight,
+    ChevronsUpDown,
     Filter,
     Folder as FolderIcon,
     FolderPlus,
     Inbox,
-    Layers,
-    Loader2,
     LogOut,
     NotebookPen,
+    PanelLeftClose,
+    Pin,
     Search,
     Tag as TagIcon,
   } from "lucide-svelte";
@@ -23,16 +24,69 @@
   import { search } from "$lib/search.svelte";
   import TagPill from "./TagPill.svelte";
   import NoteActions from "./NoteActions.svelte";
+  import FolderActions from "./FolderActions.svelte";
 
-  let { onNavigate }: { onNavigate?: () => void } = $props();
+  let {
+    onNavigate,
+    collapsed,
+    onCollapse,
+  }: {
+    onNavigate?: () => void;
+    collapsed?: boolean;
+    onCollapse?: () => void;
+  } = $props();
 
   let filterOpen = $state(false);
   let creatingFolder = $state(false);
   let newFolderName = $state("");
   let folderBusy = $state(false);
 
+  // Bottom user menu. OpenWebUI puts the account entry at the bottom of the
+  // rail and hides sign-out inside its popover.
+  let userMenuOpen = $state(false);
+  const username = $derived(auth.user?.username ?? "Account");
+  const userInitial = $derived((username[0] ?? "?").toUpperCase());
+
+  async function signOut() {
+    userMenuOpen = false;
+    await auth.logout();
+  }
+
   // Which folders are expanded, by id. Unfiled uses the empty string.
   let expanded = $state<Set<string>>(new Set());
+
+  // Pin state persisted to localStorage.
+  let pinnedIds = $state<string[]>(loadPinned());
+  function loadPinned(): string[] {
+    try {
+      return JSON.parse(localStorage.getItem("bunko-pinned") || "[]");
+    } catch {
+      return [];
+    }
+  }
+  function savePinned() {
+    localStorage.setItem("bunko-pinned", JSON.stringify(pinnedIds));
+  }
+  function isPinned(id: string) {
+    return pinnedIds.includes(id);
+  }
+  function togglePin(id: string) {
+    pinnedIds = isPinned(id)
+      ? pinnedIds.filter((x) => x !== id)
+      : [...pinnedIds, id];
+    savePinned();
+  }
+  function sortPinnedFirst(notes: Note[]) {
+    return [...notes].sort((a, b) => {
+      const ap = isPinned(a.id) ? -1 : 0;
+      const bp = isPinned(b.id) ? -1 : 0;
+      return ap - bp;
+    });
+  }
+
+  // Inline folder rename state.
+  let renamingFolderId = $state<string | null>(null);
+  let renamingFolderName = $state("");
 
   const NAV = [
     { href: "/", label: "New note", icon: NotebookPen },
@@ -91,6 +145,34 @@
     await folders.load();
   }
 
+  function startRenameFolder(folder: import("$lib/api").Folder) {
+    renamingFolderId = folder.id;
+    renamingFolderName = folder.name;
+  }
+
+  function cancelFolderRename() {
+    renamingFolderId = null;
+    renamingFolderName = "";
+  }
+
+  async function saveFolderRename(id: string) {
+    const name = renamingFolderName.trim();
+    if (!name) {
+      cancelFolderRename();
+      return;
+    }
+    await api.updateFolder(id, { name });
+    renamingFolderId = null;
+    renamingFolderName = "";
+    await folders.load();
+  }
+
+  async function deleteFolder(folder: import("$lib/api").Folder) {
+    await api.deleteFolder(folder.id);
+    await folders.load();
+    await tree.query({ tag: selectedTags.length ? selectedTags : undefined });
+  }
+
   function isActive(href: string) {
     const p = $page.url.pathname;
     return href === "/" ? p === "/" : p.startsWith(href);
@@ -104,15 +186,16 @@
 </script>
 
 {#snippet noteRow(n: Note)}
-  <li class="group/row flex items-center rounded-md transition-colors hover:bg-accent/50">
+  {@const isActiveNote = $page.url.pathname === `/notes/${n.id}`}
+  <li class={cn("group/row flex items-center rounded-md transition-colors hover:bg-accent/50", isActiveNote && "bg-accent/50")}>
     <a
       href={`/notes/${n.id}`}
       onclick={onNavigate}
       title={n.title}
       class={cn(
         "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md py-1 pl-2 pr-1 text-sm transition-colors",
-        $page.url.pathname === `/notes/${n.id}`
-          ? "bg-accent text-accent-foreground"
+        isActiveNote
+          ? "text-accent-foreground"
           : "text-muted-foreground group-hover/row:text-foreground"
       )}
     >
@@ -126,6 +209,19 @@
         {/if}
       </span>
     </a>
+    <button
+      onclick={() => togglePin(n.id)}
+      class={cn(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+        isPinned(n.id)
+          ? "text-primary opacity-100"
+          : "text-muted-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+      )}
+      aria-label={isPinned(n.id) ? "Unpin note" : "Pin note"}
+      title={isPinned(n.id) ? "Unpin note" : "Pin note"}
+    >
+      <Pin class={cn("h-4 w-4", isPinned(n.id) && "fill-current")} />
+    </button>
     <NoteActions
       note={n}
       onDeleted={() => refreshTree()}
@@ -140,17 +236,36 @@
   adds scrollable content instead of squeezing the note list away.
 -->
 <div class="flex h-full flex-col">
-  <!-- Same height as the shell's bar so the two line up. -->
-  <div class="flex h-14 shrink-0 items-center border-b pl-4 pr-2">
-    <div class="text-sm font-semibold tracking-tight text-muted-foreground">bunko</div>
+  <!--
+    Compact rail header, like OpenWebUI's: no divider, a short row with the
+    app name and the collapse control, so the note list starts higher up.
+  -->
+  <div class="flex h-9 shrink-0 items-center justify-between gap-1 px-2">
+    <a
+      href="/"
+      onclick={onNavigate}
+      class="min-w-0 flex-1 truncate rounded-lg px-1.5 py-1 text-sm font-normal tracking-tight text-foreground/90 transition-colors hover:text-foreground"
+    >
+      bunko
+    </a>
+    {#if onCollapse}
+      <button
+        class="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:inline-flex"
+        onclick={onCollapse}
+        aria-label="Collapse sidebar"
+        title="Collapse sidebar"
+      >
+        <PanelLeftClose class="h-4 w-4" />
+      </button>
+    {/if}
   </div>
 
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">
-    <nav class="space-y-1 p-3 pt-2">
+    <nav class="space-y-1 p-3 pt-1">
       <!-- Search opens a modal, so it is a button rather than a link. -->
       <button
         onclick={() => search.show()}
-        class="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+        class="flex min-h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
       >
         <Search class="h-4 w-4 shrink-0" />
         Search
@@ -162,7 +277,7 @@
           href={item.href}
           onclick={onNavigate}
           class={cn(
-            "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors",
+            "flex min-h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors",
             isActive(item.href)
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
@@ -281,8 +396,8 @@
         {#each folders.rootFolders as folder (folder.id)}
           {@const isOpen = expanded.has(folder.id)}
           {@const children = tree.inFolder(folder.id)}
-          <div>
-            <div class="flex items-center gap-0.5">
+          <div class="group/folder">
+            <div class="flex items-center gap-0.5 rounded-md ps-2 transition-colors hover:bg-accent/50">
               <button
                 class="inline-flex h-8 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
                 aria-label={isOpen ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
@@ -291,27 +406,56 @@
               >
                 <ChevronRight
                   class={cn(
-                    "h-3.5 w-3.5 transition-transform duration-200",
+                    "h-4 w-4 transition-transform duration-200",
                     isOpen && "rotate-90"
                   )}
                 />
               </button>
-              <button
-                class="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                onclick={() => toggleExpanded(folder.id)}
-              >
-                <FolderIcon class="h-4 w-4 shrink-0" />
-                <span class="truncate">{folder.name}</span>
-                <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
-                  {folder.note_count}
-                </span>
-              </button>
+              {#if renamingFolderId === folder.id}
+                <form
+                  class="flex min-h-9 flex-1 items-center"
+                  onsubmit={(e) => {
+                    e.preventDefault();
+                    void saveFolderRename(folder.id);
+                  }}
+                >
+                  <input
+                    bind:value={renamingFolderName}
+                    placeholder="Folder name"
+                    aria-label="Folder name"
+                    class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onkeydown={(e) => {
+                      if (e.key === "Escape") cancelFolderRename();
+                    }}
+                    onblur={() => {
+                      if (renamingFolderId === folder.id) void saveFolderRename(folder.id);
+                    }}
+                  />
+                </form>
+              {:else}
+                <button
+                  class="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  onclick={() => toggleExpanded(folder.id)}
+                >
+                  <FolderIcon class="h-4 w-4 shrink-0" />
+                  <span class="truncate">{folder.name}</span>
+                  <span class="ml-auto shrink-0 text-xs text-muted-foreground/70">
+                    {folder.note_count}
+                  </span>
+                </button>
+              {/if}
+              <FolderActions
+                {folder}
+                onRename={startRenameFolder}
+                onDelete={deleteFolder}
+                class="opacity-0 group-hover/folder:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+              />
             </div>
 
             <!-- Animated height reveal, same technique as the filter. -->
             {#if isOpen}
               <div class="ms-3 animate-in fade-in-0 slide-in-from-top-1 border-s border-border/60 ps-1">
-                {#each children as n (n.id)}
+                {#each sortPinnedFirst(children) as n (n.id)}
                   {@render noteRow(n)}
                 {:else}
                   <p class="px-2 py-1 text-xs text-muted-foreground">Empty</p>
@@ -328,7 +472,7 @@
     </nav>
 
     <!-- Unfiled notes: everything not in a folder. -->
-    <div class="border-t px-3 pb-2 pt-2">
+    <div class="px-3 pb-2 pt-4">
       <div class="flex items-center justify-between px-2 pb-1">
         <span class="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
           {#if selectedTags.length}
@@ -354,7 +498,7 @@
           </p>
         {:else}
           <ul class="space-y-px">
-            {#each loose as n (n.id)}
+            {#each sortPinnedFirst(loose) as n (n.id)}
               {@render noteRow(n)}
             {/each}
           </ul>
@@ -363,13 +507,57 @@
     </div>
   </div>
 
-  <div class="shrink-0 border-t p-3">
-    <button
-      class="inline-flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      onclick={() => auth.logout()}
-    >
-      <LogOut class="h-4 w-4" />
-      Sign out
-    </button>
+  <!-- Account entry pinned to the bottom of the rail. -->
+  <div class="shrink-0 p-2 pt-1">
+    <Popover.Root bind:open={userMenuOpen}>
+      <Popover.Trigger
+        class="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-accent data-[state=open]:bg-accent"
+        aria-label="Open user menu"
+      >
+        <span
+          class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-medium text-primary"
+          aria-hidden="true"
+        >
+          {userInitial}
+          <span
+            class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500"
+          ></span>
+        </span>
+        <span class="min-w-0 flex-1 truncate text-sm text-foreground/90">{username}</span>
+        <ChevronsUpDown class="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Popover.Trigger>
+
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={6}
+          class="z-50 w-60 rounded-xl border bg-card p-1 text-card-foreground shadow-lg shadow-black/20 animate-in fade-in-0 zoom-in-95"
+        >
+          <div class="flex items-center gap-2.5 px-2 py-2">
+            <span
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-medium text-primary"
+            >
+              {userInitial}
+            </span>
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium">{username}</p>
+              <p class="text-xs text-muted-foreground">Signed in</p>
+            </div>
+          </div>
+
+          <div class="my-1 h-px bg-border"></div>
+
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-300"
+            onclick={() => void signOut()}
+          >
+            <LogOut class="h-4 w-4" />
+            Sign out
+          </button>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   </div>
 </div>

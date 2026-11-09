@@ -9,7 +9,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import auth_routes, folders, notes, providers, tags
+from app.api import auth_routes, folders, media_routes, notes, providers, tags
 from app.config import get_settings
 from app.db import SessionLocal
 from app.security_headers import SecurityHeadersMiddleware
@@ -84,6 +84,7 @@ for _router in (
     tags.router,
     providers.router,
     folders.router,
+    media_routes.router,
 ):
     app.include_router(_router, prefix="/api")
 

@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Built SvelteKit output, served by this app.
     spa_dir: Path = Path("/spa")
 
+    # --- media ---
+    # Persistent media lives on a Docker volume, served through the API.
+    media_dir: Path = Path("/data/media")
+    media_max_bytes: int = 15 * 1024 * 1024
+
     # --- tagging ---
     tagging_poll_seconds: float = 2.0
     tagging_stale_seconds: int = 600

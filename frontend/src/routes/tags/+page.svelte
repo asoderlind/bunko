@@ -56,7 +56,7 @@
   }
 </script>
 
-<div class="mx-auto w-full max-w-3xl px-4 py-5">
+<div class="mx-auto w-full max-w-3xl px-4 pb-5 pt-14 md:py-5">
   <h1 class="mb-4 text-xl font-semibold tracking-tight">Tags</h1>
 
   <section class="mb-6 space-y-2 rounded-xl border bg-card p-4">

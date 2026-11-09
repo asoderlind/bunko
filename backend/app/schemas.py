@@ -152,6 +152,15 @@ class UserOut(BaseModel):
     username: str
 
 
+class MediaOut(BaseModel):
+    url: str
+    markdown: str
+    content_type: str
+    size_bytes: int
+    width: int
+    height: int
+
+
 class Page[T](BaseModel):
     count: int
     next: bool

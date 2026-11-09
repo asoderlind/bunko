@@ -23,11 +23,14 @@ I wanted a self-hosted note-taking app that I am able to pick up, throw ideas at
 | --- | --- |
 | Backend | FastAPI + SQLAlchemy 2.0 + Alembic |
 | DB | Postgres 16 |
-| Frontend | SvelteKit (Svelte 5 runes) + Tailwind + bits-ui, built as a SPA |
+| Frontend | SvelteKit (Svelte 5 runes) + Tailwind + bits-ui. Vite HMR in dev; static SPA in production |
+| Editor | CodeMirror 6 with Markdown syntax highlighting |
+| Preview | markdown-it + highlight.js + DOMPurify |
 | LLM access | OpenAI-compatible HTTP (`/v1/chat/completions`) |
-| Orchestration | Docker Compose: `web`, `worker`, `postgres` |
+| Orchestration | Docker Compose: `web`, `frontend`, `worker`, `postgres` |
 
-The SPA is built statically and served by FastAPI — there is no Node server.
+In production the SPA is built statically and served by FastAPI. In dev the
+`frontend` service runs Vite with HMR; FastAPI is still the API server.
 
 ## Repo layout
 
@@ -42,6 +45,7 @@ backend/
   alembic/          # migrations
   tests/
 frontend/           # SvelteKit app
+media/              # uploaded note images (gitignored, persistent)
 docker-compose.dev.yml
 Dockerfile
 ```
@@ -63,11 +67,15 @@ docker compose -f docker-compose.dev.yml exec web \
 The app is bound to the tailnet address in `BIND_HOST` and is not exposed on
 the LAN or the internet.
 
+- `http://<BIND_HOST>:8000` — FastAPI-served production build
+- `http://<BIND_HOST>:5173` — Vite dev server with hot reload (use this while
+  working on the frontend)
+
 ## Common commands
 
 ```bash
 # logs
-docker compose -f docker-compose.dev.yml logs -f web worker
+docker compose -f docker-compose.dev.yml logs -f web worker frontend
 
 # change the password (prompts twice, nothing echoed)
 docker compose -f docker-compose.dev.yml exec web \
@@ -91,7 +99,15 @@ If `docker` needs `sudo`, use `sg docker -c "..."` until you log in again.
 
 ## Development
 
+The `frontend` service runs Vite against the bind-mounted `frontend/` tree, so
+Svelte, TypeScript, CSS and template edits hot-reload without rebuilding the
+Docker image. It proxies `/api`, `/admin` and `/static` to `web:8000` on the
+compose network.
+
 ```bash
+# hot-reloading frontend only
+docker compose -f docker-compose.dev.yml up -d frontend
+
 # lint and format
 uv run ruff check backend/
 uv run ruff format backend/
@@ -102,6 +118,47 @@ uv run ty check backend/
 # tests
 uv run pytest backend/tests
 ```
+
+## Media
+
+Images pasted or dropped into the editor are content-addressed and stored under
+`media/`, which is bind-mounted into the web container at `/data/media`. They are
+served through authenticated `/api/media/<sha256>.<ext>` URLs, so the storage
+path is private and the Markdown stays portable within the app. Back up `media/`
+together with Postgres.
+
+## CI and image publishing
+
+- `.github/workflows/ci.yml` runs backend tests, frontend type checks/build, and a Docker build.
+- `.github/workflows/publish.yml` builds and pushes `ghcr.io/<owner>/bunko` on every push to
+  `main`, on `v*` tags, and manually via `workflow_dispatch`.
+
+Tags include `main`, `latest`, `sha-<short>`, and semver tags for releases. Images are
+built for `linux/amd64`.
+
+To pull the image from the homelab:
+
+```bash
+docker pull ghcr.io/<owner>/bunko:latest
+```
+
+The published package is private by default. For credential-free pulls, open the
+package in GitHub Packages and set its visibility to **Public**. Otherwise use
+`docker login ghcr.io` with a token that has `read:packages`.
+
+Pushing uses the automatic `GITHUB_TOKEN` (`packages: write`), so no PAT is needed
+in Actions. If the repository still denies the push, set **Settings → Actions →
+General → Workflow permissions** to "Read and write permissions".
+
+The image's default command initialises the database and starts the web server. Run
+the tagging worker with the same image and override the command:
+
+```bash
+python -m app.worker
+```
+
+Persist `/data/media` and pass `DATABASE_URL`, `SECRET_KEY`, and the `OLLAMA_*`
+variables at runtime.
 
 ## Health
 

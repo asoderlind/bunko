@@ -69,6 +69,11 @@ def _load(session: Session, note_id: uuid.UUID) -> Note:
         select(Note)
         .where(Note.id == note_id)
         .options(selectinload(Note.note_tags).selectinload(NoteTag.tag))
+        # Sessions here use expire_on_commit=False, so a note already in the
+        # identity map can still hold its pre-commit note_tags collection.
+        # Force the query to overwrite loaded state or tag add/remove responses
+        # return the old list.
+        .execution_options(populate_existing=True)
     ).first()
     if note is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found.")

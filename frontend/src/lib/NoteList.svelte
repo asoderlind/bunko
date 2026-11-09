@@ -54,7 +54,7 @@
   );
 </script>
 
-<div class="mx-auto w-full max-w-3xl px-4 py-5">
+<div class="mx-auto w-full max-w-3xl px-4 pb-5 pt-14 md:py-5">
   <div class="mb-4 flex items-center justify-between gap-3">
     <h1 class="text-xl font-semibold tracking-tight">{heading}</h1>
     {#if tagFilter.length}

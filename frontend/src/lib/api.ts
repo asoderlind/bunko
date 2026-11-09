@@ -52,6 +52,15 @@ export type Folder = {
 
 export type User = { id: number; username: string };
 
+export type MediaUpload = {
+  url: string;
+  markdown: string;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+};
+
 export type Page<T> = {
   count: number;
   next: boolean | string | null;
@@ -82,7 +91,8 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     Accept: "application/json",
     ...((opts.headers as Record<string, string>) || {}),
   };
-  if (opts.body) headers["Content-Type"] = "application/json";
+  const isFormData = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  if (opts.body && !isFormData) headers["Content-Type"] = "application/json";
 
   const method = (opts.method || "GET").toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
@@ -150,6 +160,12 @@ export const api = {
   },
 
   getNote: (id: string) => request<Note>(`/notes/${id}/`),
+
+  uploadMedia: (file: File) => {
+    const data = new FormData();
+    data.append("file", file);
+    return request<MediaUpload>("/media", { method: "POST", body: data });
+  },
 
   createNote: (body_md: string, local_only = false) =>
     request<Note>("/notes/", { method: "POST", body: JSON.stringify({ body_md, local_only }) }),

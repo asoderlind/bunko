@@ -23,3 +23,7 @@ frontend/dist/
 # SvelteKit
 frontend/.svelte-kit/
 frontend/build/
+
+# Uploaded note media
+media/*
+!media/.gitkeep

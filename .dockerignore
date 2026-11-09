@@ -1,0 +1,16 @@
+.git
+.env
+.env.example
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+
+# Uploaded media can be large and is not part of the image.
+media
+
+# Frontend build caches are regenerated inside the image.
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit
+frontend/dist

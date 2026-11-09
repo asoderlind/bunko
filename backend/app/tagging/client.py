@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Protocol
 
 import httpx
@@ -85,7 +86,12 @@ def build_system_prompt(tags: list[TagLike]) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(tag_list="\n".join(lines) or "(no tags defined)")
 
 
+IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+
+
 def truncate_body(body: str, limit: int) -> str:
+    # Image URLs and alt text are noise for tagging; keep a compact marker.
+    body = IMAGE_MARKDOWN_RE.sub("[image]", body)
     return body if len(body) <= limit else body[:limit]
 
 

@@ -52,6 +52,8 @@ services:
     volumes:
       # Bind-mount source so runserver/reload picks up edits without a rebuild.
       - ./backend:/app
+      # Note images survive container rebuilds.
+      - ./media:/data/media
     ports:
       - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-8000}:8000"
     healthcheck:
@@ -65,6 +67,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  frontend:
+    # Vite dev server with HMR. Source is bind-mounted; dependencies are
+    # installed into the host tree as the host uid, so nothing here is built
+    # into the image or left root-owned.
+    image: node:22-slim
+    working_dir: /fe
+    restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"
+    command: >
+      sh -c "corepack pnpm install --frozen-lockfile &&
+             corepack pnpm exec svelte-kit sync &&
+             corepack pnpm dev"
+    environment:
+      # corepack/pnpm caches inside the container, not the bind mount.
+      HOME: /tmp
+      COREPACK_HOME: /tmp/corepack
+      VITE_API_PROXY: http://web:8000
+    volumes:
+      - ./frontend:/fe
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - web
 
   worker:
     # Run as the host uid so bind-mounted source files aren't left root-owned.
