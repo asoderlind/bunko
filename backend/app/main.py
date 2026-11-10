@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from contextlib import asynccontextmanager
+from threading import Event, Thread
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -14,11 +17,32 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.security_headers import SecurityHeadersMiddleware
 from app.spa import spa
+from app.worker import run_background
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("app")
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Run the durable tagging queue alongside the single web process."""
+    stop_event = Event()
+    worker = Thread(
+        target=run_background,
+        args=(stop_event,),
+        name="bunko-tagging-worker",
+        daemon=True,
+    )
+    worker.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        # Allow an in-flight provider request to finish before shutdown.
+        await asyncio.to_thread(worker.join, settings.tagging_request_timeout + 30)
+
 
 app = FastAPI(
     title="bunko",
@@ -26,6 +50,7 @@ app = FastAPI(
     docs_url="/api/docs" if settings.debug else None,
     openapi_url="/api/openapi.json" if settings.debug else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # Order: compression outermost, then security headers, so headers are stamped

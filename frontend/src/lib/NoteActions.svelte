@@ -12,7 +12,7 @@
   import type { Note } from "$lib/api";
   import { api } from "$lib/api";
   import { downloadNote } from "$lib/download";
-  import { folders, sidebarNotes } from "$lib/stores.svelte";
+  import { folders, sidebarNotes, tree } from "$lib/stores.svelte";
 
   let {
     note,
@@ -46,8 +46,11 @@
 
   async function moveTo(folderId: string | null) {
     const updated = await api.updateNote(note.id, { folder_id: folderId });
+    // Keep every note list in sync immediately. The sidebar is rendered from
+    // the tree store, while full-page lists use the other two stores.
+    tree.patch(note.id, () => updated);
     sidebarNotes.patch(note.id, () => updated);
-    void folders.load();
+    await folders.load();
   }
 </script>
 

@@ -9,7 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://bunko@postgres:5432/bunko"
+    # SQLite keeps the self-hosted single-user deployment to one container.
+    database_url: str = "sqlite:////data/bunko.sqlite3"
 
     # Session signing. Required in production; a dev default keeps `uvicorn`
     # startable without ceremony, but it is loudly overridden in deploy.

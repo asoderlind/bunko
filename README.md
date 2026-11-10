@@ -22,12 +22,12 @@ I wanted a self-hosted note-taking app that I am able to pick up, throw ideas at
 | Layer | Choice |
 | --- | --- |
 | Backend | FastAPI + SQLAlchemy 2.0 + Alembic |
-| DB | Postgres 16 |
+| DB | SQLite |
 | Frontend | SvelteKit (Svelte 5 runes) + Tailwind + bits-ui. Vite HMR in dev; static SPA in production |
 | Editor | CodeMirror 6 with Markdown syntax highlighting |
 | Preview | markdown-it + highlight.js + DOMPurify |
 | LLM access | OpenAI-compatible HTTP (`/v1/chat/completions`) |
-| Orchestration | Docker Compose: `web`, `frontend`, `worker`, `postgres` |
+| Orchestration | Docker Compose: `web`, `frontend`; tagging runs in the web process |
 
 In production the SPA is built statically and served by FastAPI. In dev the
 `frontend` service runs Vite with HMR; FastAPI is still the API server.
@@ -41,11 +41,11 @@ backend/
     tagging/        # provider client + prompt
     main.py         # FastAPI app, SPA mount, health
     models.py       # SQLAlchemy models
-    worker.py       # tagging worker
+    worker.py       # tagging queue and background loop
   alembic/          # migrations
   tests/
 frontend/           # SvelteKit app
-media/              # uploaded note images (gitignored, persistent)
+data/               # SQLite database and uploaded note images (gitignored, persistent)
 docker-compose.dev.yml
 Dockerfile
 ```
@@ -53,7 +53,7 @@ Dockerfile
 ## Running
 
 ```bash
-cp .env.example .env      # then fill in SECRET_KEY, POSTGRES_PASSWORD
+cp .env.example .env      # then fill in SECRET_KEY and provider settings
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
@@ -75,7 +75,7 @@ the LAN or the internet.
 
 ```bash
 # logs
-docker compose -f docker-compose.dev.yml logs -f web worker frontend
+docker compose -f docker-compose.dev.yml logs -f web frontend
 
 # change the password (prompts twice, nothing echoed)
 docker compose -f docker-compose.dev.yml exec web \
@@ -87,12 +87,12 @@ docker compose -f docker-compose.dev.yml exec web python -m app.cli seed
 # list tags
 docker compose -f docker-compose.dev.yml exec web python -m app.cli tags
 
-# drain the tagging queue once, then exit
-docker compose -f docker-compose.dev.yml exec worker python -m app.worker --once
+# drain the tagging queue once, then exit (normally the web process handles it)
+docker compose -f docker-compose.dev.yml exec web python -m app.worker --once
 
-# psql
-docker compose -f docker-compose.dev.yml exec postgres \
-  psql -U bunko -d bunko
+# inspect the SQLite database
+docker compose -f docker-compose.dev.yml exec web \
+  python -c 'import sqlite3; print(sqlite3.connect("/data/bunko.sqlite3").execute("select name from sqlite_master where type=\\"table\\"").fetchall())'
 ```
 
 If `docker` needs `sudo`, use `sg docker -c "..."` until you log in again.
@@ -122,10 +122,10 @@ uv run pytest backend/tests
 ## Media
 
 Images pasted or dropped into the editor are content-addressed and stored under
-`media/`, which is bind-mounted into the web container at `/data/media`. They are
+`data/media/`, which is bind-mounted into the web container at `/data/media`. They are
 served through authenticated `/api/media/<sha256>.<ext>` URLs, so the storage
-path is private and the Markdown stays portable within the app. Back up `media/`
-together with Postgres.
+path is private and the Markdown stays portable within the app. Back up the
+entire `data/` directory, including both SQLite and media files.
 
 ## CI and image publishing
 
@@ -150,15 +150,11 @@ Pushing uses the automatic `GITHUB_TOKEN` (`packages: write`), so no PAT is need
 in Actions. If the repository still denies the push, set **Settings → Actions →
 General → Workflow permissions** to "Read and write permissions".
 
-The image's default command initialises the database and starts the web server. Run
-the tagging worker with the same image and override the command:
-
-```bash
-python -m app.worker
-```
-
-Persist `/data/media` and pass `DATABASE_URL`, `SECRET_KEY`, and the `OLLAMA_*`
-variables at runtime.
+The image's default command initializes new databases, applies pending Alembic
+migrations, starts the web server, and runs one background tagging thread.
+Persist `/data` and pass `SECRET_KEY`, `DATABASE_URL`, and the `OLLAMA_*`
+variables at runtime. Keep the deployment to one Uvicorn worker; multiple web
+processes would start duplicate tagging loops.
 
 ## Health
 

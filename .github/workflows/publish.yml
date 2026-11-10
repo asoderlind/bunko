@@ -80,6 +80,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          # Dell is x86_64; always publish the production image for amd64,
+          # even when development happens on the ARM64 Raspberry Pi.
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

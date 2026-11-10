@@ -18,10 +18,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -72,7 +72,7 @@ TAG_COLORS: tuple[str, ...] = (
 class Tag(Base):
     __tablename__ = "notes_tag"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(String(200), default="")
@@ -95,10 +95,10 @@ class Folder(Base):
 
     __tablename__ = "notes_folder"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(100))
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("notes_folder.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("notes_folder.id", ondelete="CASCADE"), nullable=True
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
     collapsed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -119,7 +119,7 @@ class Folder(Base):
 class Note(Base):
     __tablename__ = "notes_note"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     body_md: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(String(200), default="")
     title_source: Mapped[str] = mapped_column(String(20), default=TitleSource.DERIVED)
@@ -133,7 +133,7 @@ class Note(Base):
 
     # Notes survive folder deletion; they fall back to "unfiled".
     folder_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("notes_folder.id", ondelete="SET NULL"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("notes_folder.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -165,12 +165,12 @@ class Note(Base):
 class NoteTag(Base):
     __tablename__ = "notes_notetag"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     note_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("notes_note.id", ondelete="CASCADE")
+        Uuid(as_uuid=True), ForeignKey("notes_note.id", ondelete="CASCADE")
     )
     tag_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("notes_tag.id", ondelete="CASCADE")
+        Uuid(as_uuid=True), ForeignKey("notes_tag.id", ondelete="CASCADE")
     )
     source: Mapped[str] = mapped_column(String(10), default=TagSource.AUTO)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -187,7 +187,7 @@ class NoteTag(Base):
 class ProviderProfile(Base):
     __tablename__ = "notes_providerprofile"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     label: Mapped[str] = mapped_column(String(100))
     base_url: Mapped[str] = mapped_column(String(200))
     model: Mapped[str] = mapped_column(String(100))
@@ -229,9 +229,9 @@ class Attachment(Base):
 
     __tablename__ = "notes_attachment"
 
-    id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
     note_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("notes_note.id", ondelete="CASCADE")
+        Uuid(as_uuid=True), ForeignKey("notes_note.id", ondelete="CASCADE")
     )
     file: Mapped[str] = mapped_column(String(255))
     mime: Mapped[str] = mapped_column(String(100))

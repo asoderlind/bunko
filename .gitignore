@@ -24,6 +24,8 @@ frontend/dist/
 frontend/.svelte-kit/
 frontend/build/
 
-# Uploaded note media
+# Uploaded note media and local SQLite data
+data/*
+!data/.gitkeep
 media/*
 !media/.gitkeep

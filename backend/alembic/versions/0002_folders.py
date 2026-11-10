@@ -12,7 +12,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
 
 revision: str = "0002_folders"
 down_revision: str | None = "0001_baseline"
@@ -27,11 +26,11 @@ def upgrade() -> None:
     if not insp.has_table("notes_folder"):
         op.create_table(
             "notes_folder",
-            sa.Column("id", PgUUID(as_uuid=True), primary_key=True),
+            sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
             sa.Column("name", sa.String(100), nullable=False),
             sa.Column(
                 "parent_id",
-                PgUUID(as_uuid=True),
+                sa.Uuid(as_uuid=True),
                 sa.ForeignKey("notes_folder.id", ondelete="CASCADE"),
                 nullable=True,
             ),
@@ -42,7 +41,7 @@ def upgrade() -> None:
 
     cols = {c["name"] for c in insp.get_columns("notes_note")}
     if "folder_id" not in cols:
-        op.add_column("notes_note", sa.Column("folder_id", PgUUID(as_uuid=True), nullable=True))
+        op.add_column("notes_note", sa.Column("folder_id", sa.Uuid(as_uuid=True), nullable=True))
         op.create_foreign_key(
             "notes_note_folder_id_fkey",
             "notes_note",

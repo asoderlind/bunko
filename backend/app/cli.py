@@ -52,15 +52,25 @@ def seed() -> None:
 
 
 def init_db() -> None:
-    """Create tables if missing, then stamp the Alembic baseline.
+    """Initialize a new database and leave existing Alembic state untouched.
 
     Pragmatic for a single-user app: SQLAlchemy's metadata is the source of
     truth for the baseline schema, and Alembic tracks anything after it.
+    Pending migrations are applied by the startup command with
+    ``alembic upgrade head``.
     """
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import inspect
 
     from app.models import Base
+
+    # Only create and stamp a brand-new database. Stamping the baseline on
+    # every startup would reset Alembic's recorded revision after later
+    # migrations had been applied.
+    if inspect(engine).has_table("alembic_version"):
+        print("database already initialised")
+        return
 
     Base.metadata.create_all(bind=engine)
     cfg = Config("alembic.ini")

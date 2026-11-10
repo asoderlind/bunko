@@ -232,6 +232,19 @@ def run_once() -> bool:
         session.close()
 
 
+def run_background(stop_event: Any) -> None:
+    """Run the durable tagging queue inside the web process.
+
+    A single worker thread is enough for this single-user app. The queue is
+    stored in SQLite, so pending notes survive process restarts.
+    """
+    log.info("background tagging worker started (poll every %ss)", settings.tagging_poll_seconds)
+    while not stop_event.is_set():
+        if not run_once():
+            stop_event.wait(settings.tagging_poll_seconds)
+    log.info("background tagging worker stopped")
+
+
 def main() -> None:
     import argparse
 

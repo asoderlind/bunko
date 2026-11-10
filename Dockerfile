@@ -23,6 +23,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
+    DATABASE_URL=sqlite:////data/bunko.sqlite3 \
     MEDIA_DIR=/data/media
 
 RUN apt-get update \
@@ -43,13 +44,14 @@ WORKDIR /app
 # doesn't shadow it.
 COPY --from=frontend /fe/build /spa
 
-# Persistent note images. Compose usually bind-mounts this path.
-VOLUME ["/data/media"]
+# Persistent SQLite database and note images. Compose/Nix mounts this path.
+VOLUME ["/data"]
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
-# Self-initialise the database, then serve the API + built SPA.
-CMD ["sh", "-c", "python -m app.cli init-db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Initialise new databases, apply pending migrations, then serve the API + built SPA.
+# The web process also runs the single background tagging thread.
+CMD ["sh", "-c", "python -m app.cli init-db && alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

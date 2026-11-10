@@ -1,36 +1,17 @@
 # Development compose for bunko.
 #
-# Ollama is NOT a service here: the model runs on the MacBook over the tailnet.
+# Ollama is NOT a service here: the model runs on another machine or locally.
 # Point OLLAMA_BASE_URL at it in .env.
 #
 # Usage:
 #   cp .env.example .env   # then edit
 #   docker compose -f docker-compose.dev.yml up -d --build
 #
-# Ports bind to the tailnet address only (see BIND_HOST), so the app is not
-# reachable from the LAN or the internet -- just from your tailnet devices.
+# Ports bind to the address in BIND_HOST.
 
 name: bunko
 
 services:
-  postgres:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-bunko}
-      POSTGRES_USER: ${POSTGRES_USER:-bunko}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bunko} -d ${POSTGRES_DB:-bunko}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    # Not published: only reachable on the compose network. Use
-    # `docker compose -f docker-compose.dev.yml exec postgres psql ...` for a shell.
-
   web:
     # Run as the host uid so bind-mounted source files aren't left root-owned.
     user: "${UID:-1000}:${GID:-1000}"
@@ -39,39 +20,34 @@ services:
       dockerfile: Dockerfile
     command: >
       sh -c "python -m app.cli init-db &&
+             alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bunko}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bunko}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/bunko.sqlite3}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       DEBUG: ${DEBUG:-1}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
       TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
     volumes:
-      # Bind-mount source so runserver/reload picks up edits without a rebuild.
+      # Database and note images survive container rebuilds.
+      - ./data:/data
+      # Bind-mount source so reload picks up backend edits without a rebuild.
       - ./backend:/app
-      # Note images survive container rebuilds.
-      - ./media:/data/media
     ports:
       - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-8000}:8000"
     healthcheck:
-      # Liveness only: touches no external service, so DB pressure can't make
-      # the container look dead.
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   frontend:
-    # Vite dev server with HMR. Source is bind-mounted; dependencies are
-    # installed into the host tree as the host uid, so nothing here is built
-    # into the image or left root-owned.
+    # Vite dev server with HMR.
     image: node:22-slim
     working_dir: /fe
     restart: unless-stopped
@@ -81,7 +57,6 @@ services:
              corepack pnpm exec svelte-kit sync &&
              corepack pnpm dev"
     environment:
-      # corepack/pnpm caches inside the container, not the bind mount.
       HOME: /tmp
       COREPACK_HOME: /tmp/corepack
       VITE_API_PROXY: http://web:8000
@@ -91,35 +66,3 @@ services:
       - "${BIND_HOST:-127.0.0.1}:${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - web
-
-  worker:
-    # Run as the host uid so bind-mounted source files aren't left root-owned.
-    user: "${UID:-1000}:${GID:-1000}"
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python -m app.worker
-    restart: unless-stopped
-    # Give the worker time to finish an in-flight job on shutdown
-    # (spec 6: SIGTERM must finish the current job, not abandon it).
-    stop_grace_period: 150s
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bunko}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bunko}
-      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      DEBUG: ${DEBUG:-1}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
-      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      TAGGING_POLL_SECONDS: ${TAGGING_POLL_SECONDS:-2}
-    volumes:
-      - ./backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-volumes:
-  # external: keeps the pre-rename volume, so existing data is not orphaned
-  # when the compose project name changed.
-  pgdata:
-    external: true
-    name: easy-notes_pgdata

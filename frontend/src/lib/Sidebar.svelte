@@ -3,19 +3,20 @@
   import { page } from "$app/stores";
   import { Popover } from "bits-ui";
   import {
+    Check,
     ChevronDown,
     ChevronRight,
     ChevronsUpDown,
     Filter,
     Folder as FolderIcon,
     FolderPlus,
-    Inbox,
     LogOut,
     NotebookPen,
     PanelLeftClose,
     Pin,
     Search,
     Tag as TagIcon,
+    X,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { tagStyle } from "$lib/tag-colors";
@@ -90,7 +91,6 @@
 
   const NAV = [
     { href: "/", label: "New note", icon: NotebookPen },
-    { href: "/inbox", label: "Needs tags", icon: Inbox },
     { href: "/tags", label: "Tags", icon: TagIcon },
   ];
 
@@ -124,6 +124,12 @@
     if (next.has(id)) next.delete(id);
     else next.add(id);
     expanded = next;
+  }
+
+  function cancelCreateFolder() {
+    if (folderBusy) return;
+    newFolderName = "";
+    creatingFolder = false;
   }
 
   async function createFolder() {
@@ -377,7 +383,7 @@
 
         {#if creatingFolder}
           <form
-            class="mb-1 px-1"
+            class="mb-1 flex items-center gap-1 px-1"
             onsubmit={(e) => {
               e.preventDefault();
               void createFolder();
@@ -387,9 +393,28 @@
               bind:value={newFolderName}
               placeholder="Folder name"
               aria-label="Folder name"
-              class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={folderBusy}
             />
+            <button
+              type="submit"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              aria-label="Create folder"
+              title="Create folder"
+              disabled={folderBusy || !newFolderName.trim()}
+            >
+              <Check class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              aria-label="Cancel creating folder"
+              title="Cancel"
+              onclick={cancelCreateFolder}
+              disabled={folderBusy}
+            >
+              <X class="h-4 w-4" />
+            </button>
           </form>
         {/if}
 
