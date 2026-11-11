@@ -1,4 +1,12 @@
-import { api, type Folder, type Note, type Tag, type TagsResponse, type User } from "./api";
+import {
+  api,
+  type Folder,
+  type Note,
+  type Provider,
+  type Tag,
+  type TagsResponse,
+  type User,
+} from "./api";
 
 /**
  * Small reactive data layer built on Svelte 5 runes.
@@ -35,6 +43,7 @@ class AuthStore {
     try {
       this.user = await api.login(password);
       await tags.load();
+      void providers.load();
       return true;
     } catch (e) {
       const status = (e as { status?: number }).status;
@@ -57,6 +66,7 @@ class AuthStore {
       this.user = null;
       notes.reset();
       tags.reset();
+      providers.reset();
       folders.reset();
     }
   }
@@ -131,6 +141,45 @@ class FoldersStore {
 }
 
 export const folders = new FoldersStore();
+
+// --- providers ------------------------------------------------------------
+
+class ProvidersStore {
+  items = $state<Provider[]>([]);
+  loaded = $state(false);
+
+  async load() {
+    try {
+      this.items = (await api.listProviders()).results;
+    } finally {
+      this.loaded = true;
+    }
+  }
+
+  reset() {
+    this.items = [];
+    this.loaded = false;
+  }
+
+  get selected() {
+    return (
+      this.items.find((provider) => provider.enabled && provider.is_default) ??
+      this.items.find((provider) => provider.enabled) ??
+      null
+    );
+  }
+
+  forNote(localOnly: boolean) {
+    if (!localOnly) return this.selected;
+    return (
+      this.items.find((provider) => provider.enabled && provider.is_default && provider.is_local) ??
+      this.items.find((provider) => provider.enabled && provider.is_local) ??
+      null
+    );
+  }
+}
+
+export const providers = new ProvidersStore();
 
 // --- note lists -----------------------------------------------------------
 
@@ -255,6 +304,22 @@ class TreeStore {
 
 export const tree = new TreeStore();
 
+// The create-note flow already has a complete Note response. Hand it to the
+// note route so navigation can render immediately instead of showing a second
+// loading state while fetching the same note again.
+let createdNoteHandoff: Note | null = null;
+
+export function handoffCreatedNote(note: Note) {
+  createdNoteHandoff = note;
+}
+
+export function consumeCreatedNote(id: string): Note | null {
+  if (createdNoteHandoff?.id !== id) return null;
+  const note = createdNoteHandoff;
+  createdNoteHandoff = null;
+  return note;
+}
+
 /**
  * Sidebar list: most recent 10 of whatever the sidebar filters select,
  * "Load more" appends 10 more.
@@ -287,20 +352,25 @@ class NoteStore {
   #timer: ReturnType<typeof setTimeout> | null = null;
   #generation = 0;
 
-  async load(id: string) {
+  async load(id: string, initial: Note | null = null) {
     this.loading = true;
     this.error = null;
+    if (initial?.id === id) this.hydrate(initial);
     try {
       const n = await api.getNote(id);
-      this.note = n;
-      this.tagsState = { tag_status: n.tag_status, tag_error: n.tag_error, tags: n.tags };
-      this.#schedulePoll(id);
+      this.hydrate(n);
     } catch {
-      this.note = null;
+      if (!this.note) this.note = null;
       this.error = "Could not load this note.";
     } finally {
       this.loading = false;
     }
+  }
+
+  hydrate(n: Note) {
+    this.note = n;
+    this.tagsState = { tag_status: n.tag_status, tag_error: n.tag_error, tags: n.tags };
+    this.#schedulePoll(n.id);
   }
 
   /** Poll /notes/{id}/tags until the note settles, then stop. */
@@ -314,12 +384,18 @@ class NoteStore {
       if (generation !== this.#generation) return;
       try {
         const r = await api.getNoteTags(id);
-        this.tagsState = r;
-        if (this.note) this.note = { ...this.note, tag_status: r.tag_status, tag_error: r.tag_error };
+        this.setTags(r);
         if (r.tag_status === "done" || r.tag_status === "failed") {
-          // Tags/usage counts changed server-side.
+          // Tags and generated titles changed server-side.
+          const updated = this.note;
+          if (updated) {
+            notes.patch(id, () => updated);
+            sidebarNotes.patch(id, () => updated);
+            tree.patch(id, () => updated);
+          }
           void tags.load();
           void sidebarNotes.query();
+          void tree.query();
         }
         this.#schedulePoll(id);
       } catch {
@@ -339,7 +415,13 @@ class NoteStore {
   setTags(r: TagsResponse) {
     this.tagsState = r;
     if (this.note) {
-      this.note = { ...this.note, tag_status: r.tag_status, tag_error: r.tag_error };
+      this.note = {
+        ...this.note,
+        ...(r.title !== undefined && r.title !== null ? { title: r.title } : {}),
+        tag_status: r.tag_status,
+        tag_error: r.tag_error,
+      };
+      this.#schedulePoll(this.note.id);
     }
   }
 

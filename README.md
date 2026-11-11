@@ -81,9 +81,6 @@ docker compose -f docker-compose.dev.yml logs -f web frontend
 docker compose -f docker-compose.dev.yml exec web \
   python -m app.cli set-password --username axel
 
-# seed the provider profile from OLLAMA_BASE_URL (first run only)
-docker compose -f docker-compose.dev.yml exec web python -m app.cli seed
-
 # list tags
 docker compose -f docker-compose.dev.yml exec web python -m app.cli tags
 
@@ -152,9 +149,25 @@ General → Workflow permissions** to "Read and write permissions".
 
 The image's default command initializes new databases, applies pending Alembic
 migrations, starts the web server, and runs one background tagging thread.
-Persist `/data` and pass `SECRET_KEY`, `DATABASE_URL`, and the `OLLAMA_*`
-variables at runtime. Keep the deployment to one Uvicorn worker; multiple web
-processes would start duplicate tagging loops.
+Persist `/data` and pass `SECRET_KEY` and `DATABASE_URL` at runtime. Configure
+OpenRouter or another OpenAI-compatible provider from **Settings** after signing
+in. Keep the deployment to one Uvicorn worker; multiple web processes would
+start duplicate tagging loops.
+
+## Provider settings
+
+Open **Settings** from the account menu at the bottom of the sidebar. Add an
+OpenRouter provider with:
+
+```text
+Base URL: https://openrouter.ai/api/v1
+Model:    openai/gpt-4o-mini   # or another OpenRouter model
+API key:  your OpenRouter key
+```
+
+The API key is stored in the local SQLite database and is never returned by the
+API. The old `OLLAMA_*` environment variables and `app.cli seed` command remain
+only as deprecated compatibility support.
 
 ## Health
 
@@ -165,7 +178,7 @@ processes would start duplicate tagging loops.
 
 - Never send a `local_only` note to a non-local provider. Enforced in the
   worker, before any network call.
-- Never store API keys in the database — env var *names* only.
+- Provider API keys are write-only through the API and are never returned to the frontend.
 - Never let the model create a tag. A tag exists because a human made it.
 - The `tag_status` column is the queue. No broker, no Celery.
 - UUID primary keys, UTC timestamps, `snake_case` fields.

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { Loader2 } from "lucide-svelte";
+  import { Loader2, Lock } from "lucide-svelte";
   import { folders, notes, sidebarNotes, tags } from "$lib/stores.svelte";
   import TagPill from "$lib/TagPill.svelte";
   import NoteActions from "$lib/NoteActions.svelte";
@@ -82,7 +82,10 @@
             href={`/notes/${n.id}`}
             class="block min-w-0 flex-1 py-3.5 transition-colors hover:bg-accent/40"
           >
-            <span class="block truncate">{n.title || "(untitled)"}</span>
+            <span class="flex items-center gap-1.5 truncate">
+              {#if n.local_only}<Lock class="h-3 w-3 shrink-0 text-primary/80" />{/if}
+              <span class="truncate">{n.title || "(untitled)"}</span>
+            </span>
             <span class="mt-1.5 flex flex-wrap items-center gap-1.5">
               {#if n.tag_status === "pending" || n.tag_status === "processing"}
                 <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">tagging…</span>

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Eye, ImagePlus, PenLine } from "lucide-svelte";
+  import { Eye, ImagePlus, Lock, PenLine, Unlock } from "lucide-svelte";
   import { api, type Note } from "$lib/api";
-  import { tree } from "$lib/stores.svelte";
+  import { handoffCreatedNote, tree } from "$lib/stores.svelte";
   import { showToast } from "$lib/toast.svelte";
   import { cn } from "$lib/utils";
   import MarkdownEditor from "$lib/MarkdownEditor.svelte";
@@ -16,6 +16,7 @@
    * early and finishes sooner.
    */
   let body = $state("");
+  let privateNote = $state(false);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let editor = $state<{ insert: (text: string) => void } | null>(null);
@@ -29,6 +30,7 @@
 
   // The note we have already created in this session, if any.
   let created = $state<Note | null>(null);
+  let opened = $state(false);
   let pending = $state(false);
   let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -42,7 +44,7 @@
   let latest = "";
 
   /** Create on first content, then patch. Debounced so typing stays smooth. */
-  async function persist(value: string) {
+  async function persist(value: string, navigateAfterSave = false) {
     latest = value;
     if (!value.trim()) return;
     if (pending) return;
@@ -55,12 +57,10 @@
       let target = value;
       while (target.trim()) {
         if (!created) {
-          created = await api.createNote(target);
-          // The sidebar renders the tree, so refresh it: the note appears
-          // immediately, while the editor keeps focus.
+          created = await api.createNote(target, privateNote);
+          // Refresh the sidebar while the route switches to the full
+          // existing-note view.
           void tree.query();
-          // Swap the URL to the real note without remounting this editor.
-          history.replaceState({}, "", `/notes/${created.id}`);
         } else {
           created = await api.updateNote(created.id, { body_md: target });
           tree.patch(created.id, () => created!);
@@ -68,12 +68,24 @@
         if (latest === target) break;
         target = latest;
       }
+      if (navigateAfterSave) await openCreatedNote();
     } catch {
       saveError = "Could not save.";
     } finally {
       pending = false;
       saving = false;
     }
+  }
+
+  async function openCreatedNote() {
+    if (!created || opened) return;
+    opened = true;
+    handoffCreatedNote(created);
+    await goto(`/notes/${created.id}`, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
   }
 
   function oninput() {
@@ -83,12 +95,26 @@
 
   function onblur() {
     if (timer) clearTimeout(timer);
-    void persist(body);
+    void persist(body, true);
   }
 
   function saveNow() {
     if (timer) clearTimeout(timer);
-    void persist(body);
+    void persist(body, true);
+  }
+
+  async function togglePrivate() {
+    if (!created) {
+      privateNote = !privateNote;
+      return;
+    }
+    try {
+      created = await api.updateNote(created.id, { local_only: !created.local_only });
+      privateNote = created.local_only;
+      tree.patch(created.id, () => created!);
+    } catch {
+      saveError = "Could not change privacy.";
+    }
   }
 
   function togglePreview() {
@@ -124,7 +150,7 @@
   async function finish() {
     if (!body.trim()) return;
     if (!created) await persist(body);
-    if (created) await goto(`/notes/${created.id}`, { replaceState: true });
+    await openCreatedNote();
   }
 </script>
 
@@ -143,6 +169,18 @@
         {created ? created.title || "(untitled)" : "New note"}
       </h1>
       <div class="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          class={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground",
+            privateNote ? "text-primary" : "text-muted-foreground"
+          )}
+          onclick={() => void togglePrivate()}
+          aria-label={privateNote ? "Make note non-private" : "Make note private"}
+          title={privateNote ? "Private note — local providers only" : "Make note private"}
+        >
+          {#if privateNote}<Lock class="h-4 w-4" />{:else}<Unlock class="h-4 w-4" />{/if}
+        </button>
         <button
           type="button"
           class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

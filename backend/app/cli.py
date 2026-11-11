@@ -27,10 +27,11 @@ def get_or_create_user(username: str, password: str) -> AppUser:
 
 
 def seed() -> None:
-    """Create the provider profile from env, if none exists."""
+    """Deprecated: create a legacy provider profile from OLLAMA_* env vars."""
     settings = get_settings()
+    print("Warning: `seed` and OLLAMA_* settings are deprecated; use Settings instead.")
     if not settings.ollama_base_url:
-        print("OLLAMA_BASE_URL not set; skipping provider seed")
+        print("OLLAMA_BASE_URL not set; skipping legacy provider seed")
         return
     with SessionLocal() as session:
         if session.scalars(select(ProviderProfile)).first():
@@ -86,7 +87,7 @@ def main() -> int:
     p_user.add_argument("--username", default="axel")
 
     sub.add_parser("init-db", help="create tables and stamp the alembic baseline")
-    sub.add_parser("seed", help="seed the provider profile from env")
+    sub.add_parser("seed", help="deprecated legacy OLLAMA_* provider bootstrap")
     sub.add_parser("tags", help="list tags")
 
     args = parser.parse_args()

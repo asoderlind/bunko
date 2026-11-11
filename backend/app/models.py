@@ -191,8 +191,10 @@ class ProviderProfile(Base):
     label: Mapped[str] = mapped_column(String(100))
     base_url: Mapped[str] = mapped_column(String(200))
     model: Mapped[str] = mapped_column(String(100))
-    # Env var NAME only, never the key itself.
+    # Legacy compatibility for profiles created with OLLAMA_* variables.
+    # New profiles store the provider key in api_key instead.
     api_key_env: Mapped[str] = mapped_column(String(100), default="")
+    api_key: Mapped[str] = mapped_column(String(500), default="")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_local: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -204,6 +206,7 @@ class ProviderProfile(Base):
             "is_default",
             unique=True,
             postgresql_where=text("is_default"),
+            sqlite_where=text("is_default = 1"),
         ),
     )
 

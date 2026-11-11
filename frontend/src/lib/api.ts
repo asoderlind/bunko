@@ -29,6 +29,7 @@ export type Note = {
 export type TagsResponse = {
   tag_status: TagStatus;
   tag_error: string;
+  title?: string | null;
   tags: TagOnNote[];
 };
 
@@ -41,6 +42,21 @@ export type Tag = {
   note_count: number;
 };
 
+export type TagSuggestion = {
+  slug: string;
+  name: string;
+  description: string;
+};
+
+export type TagSuggestionsResponse = {
+  provider_label: string;
+  provider_is_local: boolean;
+  eligible_count: number;
+  sampled_count: number;
+  excluded_private_count: number;
+  suggestions: TagSuggestion[];
+};
+
 export type Folder = {
   id: string;
   name: string;
@@ -51,6 +67,18 @@ export type Folder = {
 };
 
 export type User = { id: number; username: string };
+
+export type Provider = {
+  id: string;
+  label: string;
+  base_url: string;
+  model: string;
+  api_key_env: string;
+  api_key_set: boolean;
+  is_default: boolean;
+  is_local: boolean;
+  enabled: boolean;
+};
 
 export type MediaUpload = {
   url: string;
@@ -161,6 +189,12 @@ export const api = {
 
   getNote: (id: string) => request<Note>(`/notes/${id}/`),
 
+  retagNote: (id: string) =>
+    request<Note>(`/notes/${id}/retag/`, { method: "POST" }),
+
+  generateTitle: (id: string) =>
+    request<Note>(`/notes/${id}/generate-title/`, { method: "POST" }),
+
   uploadMedia: (file: File) => {
     const data = new FormData();
     data.append("file", file);
@@ -190,6 +224,37 @@ export const api = {
     request<TagsResponse>(`/notes/${id}/tags/${tagId}/`, { method: "DELETE" }),
 
   listTags: () => request<Page<Tag>>("/tags/"),
+
+  suggestTags: (sample_size = 50) =>
+    request<TagSuggestionsResponse>("/tags/suggest/", {
+      method: "POST",
+      body: JSON.stringify({ sample_size }),
+    }),
+
+  listProviders: () => request<Page<Provider>>("/providers/"),
+
+  createProvider: (data: {
+    label: string;
+    base_url: string;
+    model: string;
+    api_key?: string;
+    is_default?: boolean;
+    is_local?: boolean;
+    enabled?: boolean;
+  }) => request<Provider>("/providers/", { method: "POST", body: JSON.stringify(data) }),
+
+  updateProvider: (
+    id: string,
+    data: Partial<{
+      label: string;
+      base_url: string;
+      model: string;
+      api_key: string;
+      is_default: boolean;
+      is_local: boolean;
+      enabled: boolean;
+    }>
+  ) => request<Provider>(`/providers/${id}/`, { method: "PUT", body: JSON.stringify(data) }),
 
   createTag: (data: { slug: string; name: string; description?: string }) =>
     request<Tag>("/tags/", { method: "POST", body: JSON.stringify(data) }),

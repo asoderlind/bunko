@@ -1,9 +1,11 @@
 <script lang="ts">
   import MarkdownIt from "markdown-it";
+  import markdownItKatex from "markdown-it-katex";
   import DOMPurify from "dompurify";
   import hljs from "highlight.js";
   import { cn } from "$lib/utils";
   import "highlight.js/styles/github-dark.css";
+  import "katex/dist/katex.min.css";
 
   let {
     source,
@@ -35,7 +37,7 @@
       }
       return `<pre><code class="hljs">${escapeHtml(code)}</code></pre>`;
     },
-  });
+  }).use(markdownItKatex);
 
   const rendered = $derived(DOMPurify.sanitize(md.render(source ?? "")));
 </script>

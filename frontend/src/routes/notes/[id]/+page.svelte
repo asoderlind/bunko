@@ -2,10 +2,17 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { Eye, ImagePlus, Loader2, PenLine, Plus } from "lucide-svelte";
+  import { Eye, ImagePlus, Loader2, Lock, PenLine, Plus, Unlock } from "lucide-svelte";
   import { DropdownMenu } from "bits-ui";
   import { api, ApiError, type Note, type TagsResponse } from "$lib/api";
-  import { createNoteStore, notes, sidebarNotes, tags, tree } from "$lib/stores.svelte";
+  import {
+    consumeCreatedNote,
+    createNoteStore,
+    notes,
+    sidebarNotes,
+    tags,
+    tree,
+  } from "$lib/stores.svelte";
   import { showToast } from "$lib/toast.svelte";
   import { cn } from "$lib/utils";
   import { tagStyle } from "$lib/tag-colors";
@@ -45,7 +52,7 @@
   // URL without refetching. Track the route id instead.
   $effect(() => {
     const current = id;
-    if (current) void store.load(current);
+    if (current) void store.load(current, consumeCreatedNote(current));
   });
 
   // Reset the editor when the route changes to a different note.
@@ -91,6 +98,7 @@
 
     const withTags = (n: Note): Note => ({
       ...n,
+      ...(r.title !== undefined && r.title !== null ? { title: r.title } : {}),
       tags: r.tags,
       tag_status: r.tag_status,
       tag_error: r.tag_error,
@@ -126,6 +134,25 @@
       saveError = "Could not save.";
     } finally {
       saving = false;
+    }
+  }
+
+  async function togglePrivate() {
+    const current = store.note;
+    if (!current) return;
+    try {
+      const updated = await api.updateNote(current.id, { local_only: !current.local_only });
+      store.setNote(updated);
+      store.setTags({
+        tag_status: updated.tag_status,
+        tag_error: updated.tag_error,
+        tags: updated.tags,
+      });
+      notes.patch(updated.id, () => updated);
+      sidebarNotes.patch(updated.id, () => updated);
+      tree.patch(updated.id, () => updated);
+    } catch {
+      showToast("Could not change privacy.", "error");
     }
   }
 
@@ -270,6 +297,18 @@
           <div class="flex shrink-0 items-center gap-1">
             <button
               type="button"
+              class={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground",
+                n.local_only ? "text-primary" : "text-muted-foreground"
+              )}
+              onclick={() => void togglePrivate()}
+              aria-label={n.local_only ? "Make note non-private" : "Make note private"}
+              title={n.local_only ? "Private note — local providers only" : "Make note private"}
+            >
+              {#if n.local_only}<Lock class="h-4 w-4" />{:else}<Unlock class="h-4 w-4" />{/if}
+            </button>
+            <button
+              type="button"
               class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onclick={openFilePicker}
               aria-label="Insert image"
@@ -297,6 +336,14 @@
               note={n}
               align="end"
               onDeleted={() => goto("/")}
+              onUpdated={(updated) => {
+                store.setNote(updated);
+                store.setTags({
+                  tag_status: updated.tag_status,
+                  tag_error: updated.tag_error,
+                  tags: updated.tags,
+                });
+              }}
               class="-mr-1.5 shrink-0"
             />
           </div>

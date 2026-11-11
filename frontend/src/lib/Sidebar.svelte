@@ -10,18 +10,20 @@
     Filter,
     Folder as FolderIcon,
     FolderPlus,
+    Lock,
     LogOut,
     NotebookPen,
     PanelLeftClose,
     Pin,
     Search,
+    Settings,
     Tag as TagIcon,
     X,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { tagStyle } from "$lib/tag-colors";
   import { api, type Note } from "$lib/api";
-  import { auth, folders, tags, tree } from "$lib/stores.svelte";
+  import { auth, folders, providers, tags, tree } from "$lib/stores.svelte";
   import { search } from "$lib/search.svelte";
   import TagPill from "./TagPill.svelte";
   import NoteActions from "./NoteActions.svelte";
@@ -188,6 +190,7 @@
     if (!tree.loaded) void tree.query();
     if (!tags.loaded) void tags.load();
     if (!folders.loaded) void folders.load();
+    if (!providers.loaded) void providers.load();
   });
 </script>
 
@@ -205,6 +208,9 @@
           : "text-muted-foreground group-hover/row:text-foreground"
       )}
     >
+      {#if n.local_only}
+        <Lock class="h-3 w-3 shrink-0 text-primary/80" aria-label="Private note" />
+      {/if}
       <span class="min-w-0 flex-1 truncate">{n.title || "(untitled)"}</span>
       <span class="flex shrink-0 items-center gap-1">
         {#each n.tags.slice(0, 2) as t (t.id)}
@@ -572,6 +578,14 @@
           </div>
 
           <div class="my-1 h-px bg-border"></div>
+
+          <a
+            href="/settings"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Settings class="h-4 w-4" />
+            Settings
+          </a>
 
           <button
             type="button"

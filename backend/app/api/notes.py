@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import current_user
 from app.db import get_session
 from app.models import AppUser, Note, NoteTag, Tag, TagSource, TagStatus, TitleSource
+from app.tagging.provider import resolve_provider
 from app.schemas import (
     NoteIn,
     NoteOut,
@@ -24,10 +25,6 @@ from app.schemas import (
 
 router = APIRouter(prefix="/notes", tags=["notes"], redirect_slashes=True)
 # Accept both /api/notes and /api/notes/ : the SPA uses the trailing form.
-
-# Below this many characters a note keeps its derived first-line title and is
-# not sent for tagging; above it, a proper title and tags are generated once.
-TITLE_MIN_CHARS = 120
 
 SessionDep = Annotated[Session, Depends(get_session)]
 UserDep = Annotated[AppUser, Depends(current_user)]
@@ -85,6 +82,21 @@ def _recount(session: Session, tag: Tag) -> None:
         session.scalar(select(func.count()).select_from(NoteTag).where(NoteTag.tag_id == tag.id))
         or 0
     )
+
+
+def _clear_automatic_tags(session: Session, note: Note) -> None:
+    links = session.scalars(
+        select(NoteTag).where(
+            NoteTag.note_id == note.id,
+            NoteTag.source == TagSource.AUTO,
+        )
+    ).all()
+    affected_tags = [link.tag for link in links]
+    for link in links:
+        session.delete(link)
+    session.flush()
+    for tag in affected_tags:
+        _recount(session, tag)
 
 
 @router.get("", response_model=Page[NoteOut])
@@ -150,9 +162,10 @@ def create_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut
         body_md=payload.body_md,
         local_only=payload.local_only,
         folder_id=payload.folder_id,
-        # Short notes stay out of the queue; they have no real content yet.
         tag_status=(
-            TagStatus.PENDING if len(payload.body_md.strip()) >= TITLE_MIN_CHARS else TagStatus.DONE
+            TagStatus.PENDING
+            if resolve_provider(session, payload.local_only) is not None
+            else TagStatus.DONE
         ),
     )
     if payload.title is not None and payload.title.strip():
@@ -218,6 +231,44 @@ def get_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteOut
     return _note_out(_load(session, note_id))
 
 
+@router.post("/{note_id}/retag", response_model=NoteOut)
+def retag_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteOut:
+    """Queue a note for fresh tagging with the selected provider."""
+    note = _load(session, note_id)
+    provider = resolve_provider(session, note.local_only)
+    if provider is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No enabled compatible provider configured.",
+        )
+
+    _clear_automatic_tags(session, note)
+    note.tag_status = TagStatus.PENDING
+    note.tag_error = ""
+    session.commit()
+    return _note_out(_load(session, note.id))
+
+
+@router.post("/{note_id}/generate-title", response_model=NoteOut)
+def generate_title(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteOut:
+    """Allow a user title to be handed back to the automatic title generator."""
+    note = _load(session, note_id)
+    if resolve_provider(session, note.local_only) is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No enabled compatible provider configured.",
+        )
+
+    note.title = note.derive_title()
+    note.title_source = TitleSource.DERIVED
+    note.content_revision += 1
+    _clear_automatic_tags(session, note)
+    note.tag_status = TagStatus.PENDING
+    note.tag_error = ""
+    session.commit()
+    return _note_out(_load(session, note.id))
+
+
 @router.patch("/{note_id}", response_model=NoteOut)
 def update_note(
     note_id: uuid.UUID, payload: NotePatch, session: SessionDep, _user: UserDep
@@ -226,6 +277,7 @@ def update_note(
     data = payload.model_dump(exclude_unset=True)
 
     body_changed = "body_md" in data and data["body_md"] != note.body_md
+    privacy_changed = "local_only" in data and bool(data["local_only"]) != note.local_only
     if "body_md" in data and not (data["body_md"] or "").strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Note body cannot be empty.")
 
@@ -252,14 +304,25 @@ def update_note(
         note.body_md = data["body_md"]
         note.content_revision += 1
 
-        # Requeue tagging when the text is substantial enough for a generated
-        # title and meaningful tags. Below the threshold the derived first line
-        # stays, and nothing is sent to the model for a half-written note.
-        if len(note.body_md.strip()) >= TITLE_MIN_CHARS:
+        # Every saved body can trigger title/tag generation when a compatible
+        # provider is configured. The frontend debounces typing, while the
+        # worker discards results for revisions edited in the meantime.
+        if resolve_provider(session, note.local_only) is not None:
+            _clear_automatic_tags(session, note)
             note.tag_status = TagStatus.PENDING
             note.tag_error = ""
-        elif note.tag_status == TagStatus.PENDING:
-            # Still short: keep it pending without spamming the worker.
+        elif note.tag_status in (TagStatus.PENDING, TagStatus.PROCESSING):
+            note.tag_status = TagStatus.DONE
+            note.tag_error = ""
+    elif privacy_changed:
+        # Invalidate any job claimed before the privacy change. An already
+        # transmitted request cannot be recalled, but its result is ignored.
+        note.content_revision += 1
+        if resolve_provider(session, note.local_only) is not None:
+            if note.tag_status == TagStatus.PROCESSING:
+                note.tag_status = TagStatus.PENDING
+        elif note.tag_status in (TagStatus.PENDING, TagStatus.PROCESSING):
+            note.tag_status = TagStatus.DONE
             note.tag_error = ""
 
     session.commit()
@@ -280,6 +343,7 @@ def get_note_tags(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> Ta
     return TagsResponse(
         tag_status=note.tag_status,
         tag_error=note.tag_error,
+        title=note.title,
         tags=_note_tags_out(note),
     )
 
@@ -308,10 +372,12 @@ def add_note_tag(
     session.flush()
     _recount(session, tag)
     session.commit()
+    updated = _load(session, note.id)
     return TagsResponse(
-        tag_status=note.tag_status,
-        tag_error=note.tag_error,
-        tags=_note_tags_out(_load(session, note.id)),
+        tag_status=updated.tag_status,
+        tag_error=updated.tag_error,
+        title=updated.title,
+        tags=_note_tags_out(updated),
     )
 
 
@@ -330,10 +396,12 @@ def remove_note_tag(
     session.flush()
     _recount(session, tag)
     session.commit()
+    updated = _load(session, note.id)
     return TagsResponse(
-        tag_status=note.tag_status,
-        tag_error=note.tag_error,
-        tags=_note_tags_out(_load(session, note.id)),
+        tag_status=updated.tag_status,
+        tag_error=updated.tag_error,
+        title=updated.title,
+        tags=_note_tags_out(updated),
     )
 
 

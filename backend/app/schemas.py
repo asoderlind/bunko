@@ -33,6 +33,25 @@ class TagIn(BaseModel):
         return v
 
 
+class TagSuggestionIn(BaseModel):
+    sample_size: int = Field(default=50, ge=10, le=100)
+
+
+class TagSuggestion(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+
+
+class TagSuggestionsOut(BaseModel):
+    provider_label: str
+    provider_is_local: bool
+    eligible_count: int
+    sampled_count: int
+    excluded_private_count: int
+    suggestions: list[TagSuggestion]
+
+
 class TagPatch(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=100)
     name: str | None = Field(default=None, min_length=1, max_length=100)
@@ -116,6 +135,7 @@ class NotePatch(BaseModel):
 class TagsResponse(BaseModel):
     tag_status: str
     tag_error: str
+    title: str | None = None
     tags: list[NoteTagOut]
 
 
@@ -127,6 +147,7 @@ class ProviderOut(BaseModel):
     base_url: str
     model: str
     api_key_env: str
+    api_key_set: bool
     is_default: bool
     is_local: bool
     enabled: bool
@@ -136,7 +157,9 @@ class ProviderIn(BaseModel):
     label: str
     base_url: str
     model: str
+    # Deprecated compatibility field; new configuration should use api_key.
     api_key_env: str = ""
+    api_key: str | None = None
     is_default: bool = False
     is_local: bool = False
     enabled: bool = True

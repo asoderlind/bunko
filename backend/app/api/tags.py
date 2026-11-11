@@ -10,9 +10,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
+from app.config import get_settings
 from app.db import get_session
-from app.models import AppUser, NoteTag, Tag
-from app.schemas import Page, TagIn, TagMergeIn, TagOut, TagPatch
+from app.models import AppUser, Note, NoteTag, Tag
+from app.schemas import (
+    Page,
+    TagIn,
+    TagMergeIn,
+    TagOut,
+    TagPatch,
+    TagSuggestionIn,
+    TagSuggestionsOut,
+)
+from app.tagging import client
+from app.tagging.provider import resolve_provider
 
 router = APIRouter(prefix="/tags", tags=["tags"], redirect_slashes=True)
 # Accept both /api/tags and /api/tags/ : the SPA uses the trailing form.
@@ -49,6 +60,70 @@ def list_tags(session: SessionDep, _user: UserDep) -> Page[TagOut]:
     rows = session.scalars(select(Tag).order_by(Tag.usage_count.desc(), Tag.slug)).all()
     return Page[TagOut](
         count=len(rows), next=False, previous=False, results=[_out(t) for t in rows]
+    )
+
+
+@router.post("/suggest", response_model=TagSuggestionsOut)
+def suggest_tags(
+    payload: TagSuggestionIn, session: SessionDep, _user: UserDep
+) -> TagSuggestionsOut:
+    """Suggest additions to the global tag vocabulary from a safe note sample."""
+    settings = get_settings()
+    provider = resolve_provider(session, local_only=False)
+    if provider is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No enabled provider configured.")
+
+    total = session.scalar(select(func.count()).select_from(Note)) or 0
+    eligible_stmt = select(Note)
+    if not provider.is_local:
+        eligible_stmt = eligible_stmt.where(Note.local_only.is_(False))
+    eligible_count = session.scalar(
+        select(func.count()).select_from(eligible_stmt.subquery())
+    ) or 0
+    sampled = session.scalars(
+        eligible_stmt.order_by(func.random()).limit(payload.sample_size)
+    ).all()
+
+    if not sampled:
+        return TagSuggestionsOut(
+            provider_label=provider.label,
+            provider_is_local=provider.is_local,
+            eligible_count=eligible_count,
+            sampled_count=0,
+            excluded_private_count=total - eligible_count,
+            suggestions=[],
+        )
+
+    existing = session.scalars(select(Tag).order_by(Tag.slug).limit(200)).all()
+    existing_slugs = {tag.slug for tag in existing}
+    existing_text = "\n".join(
+        f"- {tag.slug}: {tag.name} — {tag.description or '(no description)'}"
+        for tag in existing
+    ) or "(none)"
+    note_text = "\n\n".join(
+        f"NOTE {index}: {note.title or '(untitled)'}\n"
+        f"EXCERPT: {client.truncate_body(note.body_md, 350)}"
+        for index, note in enumerate(sampled, 1)
+    )
+    prompt = (
+        f"EXISTING TAGS:\n{existing_text}\n\n"
+        f"NOTE SAMPLE ({len(sampled)} of {eligible_count} eligible notes):\n{note_text}"
+    )
+    prompt = client.truncate_body(prompt, settings.tagging_max_input_chars)
+
+    try:
+        raw = client.call_tag_suggester(provider, prompt, settings.tagging_request_timeout)
+        suggestions = client.parse_tag_suggestions(raw, existing_slugs)
+    except (client.ProviderError, client.OutputError) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)[:200]) from exc
+
+    return TagSuggestionsOut(
+        provider_label=provider.label,
+        provider_is_local=provider.is_local,
+        eligible_count=eligible_count,
+        sampled_count=len(sampled),
+        excluded_private_count=total - eligible_count,
+        suggestions=suggestions,
     )
 
 

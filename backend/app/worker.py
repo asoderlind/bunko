@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Note, NoteTag, ProviderProfile, Tag, TagSource, TagStatus, TitleSource
 from app.tagging import client
+from app.tagging.provider import resolve_provider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,19 +80,8 @@ def claim_one(session: Session) -> dict[str, Any] | None:
     return claimed
 
 
-def _resolve_profile(session: Session) -> ProviderProfile | None:
-    default = session.scalars(
-        select(ProviderProfile).where(
-            ProviderProfile.enabled.is_(True), ProviderProfile.is_default.is_(True)
-        )
-    ).first()
-    if default is not None:
-        return default
-    return session.scalars(
-        select(ProviderProfile)
-        .where(ProviderProfile.enabled.is_(True))
-        .order_by(ProviderProfile.is_local)
-    ).first()
+def _resolve_profile(session: Session, local_only: bool) -> ProviderProfile | None:
+    return resolve_provider(session, local_only)
 
 
 def _recount(session: Session, tag: Tag) -> None:
@@ -165,16 +155,10 @@ def fail(session: Session, claimed: dict[str, Any], reason: str) -> None:
 
 def tag_note(session: Session, claimed: dict[str, Any]) -> None:
     note_id: UUID = claimed["id"]
-    profile = _resolve_profile(session)
+    profile = _resolve_profile(session, claimed["local_only"])
     if profile is None:
         log.warning("no enabled provider; failing note %s", note_id)
         fail(session, claimed, "no provider configured")
-        return
-
-    # Hard rule: a local_only note must never reach a remote provider.
-    if claimed["local_only"] and not profile.is_local:
-        log.warning("note %s is local_only but provider %r is not", note_id, profile.label)
-        fail(session, claimed, "local_only note with no local provider configured")
         return
 
     tags = session.scalars(
@@ -182,11 +166,8 @@ def tag_note(session: Session, claimed: dict[str, Any]) -> None:
         .order_by(Tag.usage_count.desc(), Tag.slug)
         .limit(settings.tagging_prompt_tag_limit)
     ).all()
-    if not tags:
-        log.info("no tags defined; completing note %s with zero tags", note_id)
-        complete(session, claimed, [], None)
-        return
-
+    # The provider also generates the title, so call it even when the tag
+    # catalogue is empty. In that case the valid tag list is simply empty.
     system_prompt = client.build_system_prompt(list(tags))
     allowed = {t.slug for t in tags}
     body = client.truncate_body(claimed["body_md"], settings.tagging_max_input_chars)

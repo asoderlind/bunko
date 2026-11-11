@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     tagging_max_input_chars: int = 6000
     tagging_prompt_tag_limit: int = 50
 
-    # Seeded into provider_profile on first run.
+    # Deprecated legacy bootstrap settings. Configure providers in Settings.
+    # Kept temporarily so existing installations can migrate without breaking.
     ollama_base_url: str = ""
     ollama_model: str = "llama3.1:8b"
 
