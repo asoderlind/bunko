@@ -136,7 +136,7 @@ built for `linux/amd64`.
 To pull the image from the homelab:
 
 ```bash
-docker pull ghcr.io/<owner>/bunko:latest
+docker pull ghcr.io/<owner>/bunko:0.0.3
 ```
 
 The published package is private by default. For credential-free pulls, open the
@@ -153,6 +153,48 @@ Persist `/data` and pass `SECRET_KEY` and `DATABASE_URL` at runtime. Configure
 OpenRouter or another OpenAI-compatible provider from **Settings** after signing
 in. Keep the deployment to one Uvicorn worker; multiple web processes would
 start duplicate tagging loops.
+
+
+## Publishing a versioned release
+
+Use stable semantic versions: bump the patch for fixes, minor for features, and
+major for breaking changes. Keep upcoming changes under `## Unreleased` in
+`changelog.md`. Before releasing, move them into a new `## MAJOR.MINOR.PATCH`
+section (optionally followed by ` — YYYY-MM-DD`). Never reuse a published tag.
+
+For the next prepared release, **0.0.3**, review and commit the release
+changes, ensure CI passes, then run from this repository:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_*.py'
+python3 scripts/release_notes.py v0.0.3
+git push origin main
+git tag -a v0.0.3 -m "Release 0.0.3"
+git push origin v0.0.3
+```
+
+The publish workflow rejects malformed tags and missing, empty, or duplicate
+changelog sections. It publishes `ghcr.io/asoderlind/bunko:0.0.3`
+and then creates a GitHub release containing only that version's notes.
+Only stable `vMAJOR.MINOR.PATCH` tags are supported by this release procedure.
+Branch, SHA, `latest`, and major/minor image aliases are moving tags; use the
+full version for production. Do not move or republish existing release tags.
+
+### Update HomeLab after publishing
+
+Wait for the tag's publish workflow and GitHub release to succeed. Only then
+edit `homelab/hosts/dell/services/bunko.nix` to use:
+
+```nix
+image = "ghcr.io/asoderlind/bunko:0.0.3";
+```
+
+Commit the HomeLab change and run your normal Dell NixOS rebuild/deployment.
+The changed image reference makes Podman fetch that release. For each later
+release, change only the full version string after its image is available.
+Publishing an app release does not automatically change or deploy HomeLab.
+Back up persistent data before upgrading; rolling back the image alone does
+not undo database/schema changes.
 
 ## Provider settings
 

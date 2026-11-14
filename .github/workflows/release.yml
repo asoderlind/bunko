@@ -1,8 +1,7 @@
 name: Create GitHub release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
 
 permissions:
   contents: write
@@ -14,11 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Extract release notes
+        run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --verify-tag \
-            --title "${GITHUB_REF_NAME#v}" \
-            --notes-file changelog.md
+          # A rerun after a successful release should be harmless.
+          if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "${GITHUB_REF_NAME#v}" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

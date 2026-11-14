@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+## 0.0.3
+
+### Changed
+
+- Validate release tags against their matching changelog entries before publishing container images.
+- Create GitHub releases only after the versioned image is published, using release-specific notes.
+- Document version-pinned HomeLab deployments and the release procedure.
+
 ## 0.0.2 — 2026-11-11
 
 Provider configuration, privacy controls, generative tag suggestions, and a smoother note workflow.
