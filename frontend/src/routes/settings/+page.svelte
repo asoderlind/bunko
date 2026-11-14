@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { KeyRound, Loader2, Pencil, Save, X } from "lucide-svelte";
   import { api, type Provider } from "$lib/api";
   import { providers as providerStore } from "$lib/stores.svelte";
@@ -9,6 +9,8 @@
   let saving = $state(false);
   let error = $state<string | null>(null);
   let editingId = $state<string | null>(null);
+  let providerForm: HTMLElement;
+  let nameInput: HTMLInputElement;
 
   let label = $state("OpenRouter");
   let baseUrl = $state("https://openrouter.ai/api/v1");
@@ -39,7 +41,8 @@
     isLocal = false;
   }
 
-  function editProvider(provider: Provider) {
+  async function editProvider(provider: Provider) {
+    if (saving) return;
     editingId = provider.id;
     label = provider.label;
     baseUrl = provider.base_url;
@@ -48,6 +51,9 @@
     isDefault = provider.is_default;
     isLocal = provider.is_local;
     error = null;
+    await tick();
+    providerForm.scrollIntoView({ block: "start", behavior: "instant" });
+    nameInput.focus({ preventScroll: true });
   }
 
   async function save() {
@@ -88,7 +94,7 @@
   <h1 class="mb-1 text-xl font-semibold tracking-tight">Settings</h1>
   <p class="mb-5 text-sm text-muted-foreground">Configure the AI provider used for automatic titles and tags.</p>
 
-  <section class="space-y-4 rounded-xl border bg-card p-4">
+  <section bind:this={providerForm} class="scroll-mt-16 space-y-4 rounded-xl border bg-card p-4">
     <div class="flex items-start gap-3">
       <KeyRound class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
       <div>
@@ -102,7 +108,7 @@
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="space-y-1 text-sm">
         <span class="text-muted-foreground">Name</span>
-        <input bind:value={label} class="h-10 w-full rounded-md border border-input bg-background px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        <input bind:this={nameInput} bind:value={label} class="h-10 w-full rounded-md border border-input bg-background px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       </label>
       <label class="space-y-1 text-sm">
         <span class="text-muted-foreground">Model</span>
@@ -180,7 +186,9 @@
             <p class="truncate text-xs text-muted-foreground">{provider.base_url} · {provider.model}</p>
           </div>
           <button
-            onclick={() => editProvider(provider)}
+            type="button"
+            onclick={() => void editProvider(provider)}
+            disabled={saving}
             class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label={`Edit ${provider.label}`}
             title="Edit provider"

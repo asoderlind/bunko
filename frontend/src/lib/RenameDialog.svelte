@@ -3,7 +3,7 @@
   import { Loader2 } from "lucide-svelte";
   import type { Note } from "$lib/api";
   import { api } from "$lib/api";
-  import { notes, sidebarNotes } from "$lib/stores.svelte";
+  import { notes, sidebarNotes, tree } from "$lib/stores.svelte";
 
   let {
     note,
@@ -17,21 +17,29 @@
 
   let title = $state("");
   let saving = $state(false);
+  let error = $state<string | null>(null);
 
   // Reset the field whenever a different note is opened.
   $effect(() => {
-    if (open && note) title = note.title;
+    if (open && note) {
+      title = note.title;
+      error = null;
+    }
   });
 
   async function save() {
-    if (!note) return;
+    if (!note || saving) return;
     saving = true;
+    error = null;
     try {
       const updated = await api.updateNote(note.id, { title: title.trim() });
       notes.patch(note.id, () => updated);
       sidebarNotes.patch(note.id, () => updated);
+      tree.patch(note.id, () => updated);
       onSaved?.(updated);
       open = false;
+    } catch {
+      error = "Could not change the title. Please try again.";
     } finally {
       saving = false;
     }
@@ -63,6 +71,10 @@
         maxlength={200}
         class="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
+
+      {#if error}
+        <p role="alert" class="text-sm text-red-400">{error}</p>
+      {/if}
 
       <div class="flex gap-2">
         <button

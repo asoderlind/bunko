@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.0.4
+
+### Added
+
+- App icons for browser tabs, Apple home screens, and PWA manifests, with SVG sources and reproducible PNG generation.
+
+### Fixed
+
+- Bring the provider edit form into view and focus its name field when selecting Edit in Configured providers.
+- Make Change title open the rename dialog from the sidebar and note editor.
+- Refresh the sidebar tree after renaming and show a retryable error if saving fails.
+
 ## 0.0.3
 
 ### Changed

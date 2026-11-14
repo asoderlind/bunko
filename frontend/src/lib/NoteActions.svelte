@@ -15,6 +15,7 @@
   import type { Note } from "$lib/api";
   import { api } from "$lib/api";
   import { downloadNote } from "$lib/download";
+  import RenameDialog from "$lib/RenameDialog.svelte";
   import { showToast } from "$lib/toast.svelte";
   import { folders, notes, providers, sidebarNotes, tags, tree } from "$lib/stores.svelte";
 
@@ -41,6 +42,7 @@
 
   let open = $state(false);
   let deleteOpen = $state(false);
+  let renameOpen = $state(false);
   let deleting = $state(false);
   let deleteError = $state<string | null>(null);
   let privacyChanging = $state(false);
@@ -175,7 +177,13 @@
       </DropdownMenu.Item>
 
       {#if !compact}
-        <DropdownMenu.Item class={itemClass} onSelect={() => onRename?.(note)}>
+        <DropdownMenu.Item
+          class={itemClass}
+          onSelect={() => {
+            if (onRename) onRename(note);
+            else renameOpen = true;
+          }}
+        >
           <Pencil class="h-4 w-4" /> Change title
         </DropdownMenu.Item>
 
@@ -278,6 +286,8 @@
     </DropdownMenu.Content>
   </DropdownMenu.Portal>
 </DropdownMenu.Root>
+
+<RenameDialog {note} bind:open={renameOpen} onSaved={patchNote} />
 
 <Dialog.Root bind:open={deleteOpen}>
   <Dialog.Portal>

@@ -1,7 +1,7 @@
 {
   "name": "bunko-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.4",
   "type": "module",
   "packageManager": "pnpm@12.18.0",
   "scripts": {
