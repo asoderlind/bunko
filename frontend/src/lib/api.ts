@@ -187,6 +187,18 @@ export const api = {
     return request<Page<Note>>(`/notes/tree${qs ? "?" + qs : ""}`);
   },
 
+  importCollection: (file: File) => {
+    const data = new FormData();
+    data.append("file", file);
+    return request<{ imported: number }>("/notes/import-collection", { method: "POST", body: data });
+  },
+
+  importNote: (body_md: string, generation: { generate_tags: boolean; generate_title: boolean }) =>
+    request<Note>("/notes/import", {
+      method: "POST",
+      body: JSON.stringify({ body_md, ...generation }),
+    }),
+
   getNote: (id: string) => request<Note>(`/notes/${id}/`),
 
   retagNote: (id: string) =>
@@ -201,8 +213,15 @@ export const api = {
     return request<MediaUpload>("/media", { method: "POST", body: data });
   },
 
-  createNote: (body_md: string, local_only = false) =>
-    request<Note>("/notes/", { method: "POST", body: JSON.stringify({ body_md, local_only }) }),
+  createNote: (
+    body_md: string,
+    local_only = false,
+    generation: { generate_tags?: boolean; generate_title?: boolean } = {}
+  ) =>
+    request<Note>("/notes/", {
+      method: "POST",
+      body: JSON.stringify({ body_md, local_only, ...generation }),
+    }),
 
   updateNote: (
     id: string,

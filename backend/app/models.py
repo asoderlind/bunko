@@ -128,6 +128,7 @@ class Note(Base):
 
     # Bumped on every body write that should invalidate in-flight tagging.
     content_revision: Mapped[int] = mapped_column(Integer, default=0)
+    generation_mode: Mapped[str] = mapped_column(String(20), default="both", server_default="both")
 
     tag_error: Mapped[str] = mapped_column(String(200), default="")
 

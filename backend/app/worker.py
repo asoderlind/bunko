@@ -73,6 +73,9 @@ def claim_one(session: Session) -> dict[str, Any] | None:
         "body_md": note.body_md,
         "local_only": note.local_only,
         "revision": note.content_revision,
+        "generation_mode": note.generation_mode,
+        "title": note.title,
+        "title_source": note.title_source,
     }
     note.tag_status = TagStatus.PROCESSING
     note.tag_error = ""
@@ -100,12 +103,21 @@ def complete(
     note = session.get(Note, claimed["id"], with_for_update=True)
     if note is None:
         return
+    if note.local_only:
+        note.tag_status = TagStatus.DONE
+        note.tag_error = ""
+        session.commit()
+        return
     if note.content_revision != claimed["revision"]:
         log.info("note %s changed during tagging; discarding result", claimed["id"])
         return
     if note.tag_status != TagStatus.PROCESSING:
         log.info("note %s no longer processing; discarding", claimed["id"])
         return
+
+    mode = claimed.get("generation_mode", "both")
+    if mode == "title":
+        valid_tags = []
 
     for item in valid_tags:
         tag = session.scalars(select(Tag).where(Tag.slug == item["slug"])).first()
@@ -126,8 +138,15 @@ def complete(
         session.flush()
         _recount(session, tag)
 
-    # Only replace a machine-made title; never clobber the user's own.
-    if title and note.title_source != TitleSource.USER:
+    # Explicit generation may replace a user title, but not a newer edit.
+    title_unchanged = (
+        note.title == claimed.get("title")
+        and note.title_source == claimed.get("title_source")
+    )
+    if title and mode != "tags" and (
+        (mode == "title" and title_unchanged)
+        or (mode == "both" and note.title_source != TitleSource.USER)
+    ):
         note.title = title[:200]
         note.title_source = TitleSource.GENERATED
 
@@ -148,13 +167,16 @@ def fail(session: Session, claimed: dict[str, Any], reason: str) -> None:
         return
     if note.content_revision != claimed["revision"]:
         return
-    note.tag_status = TagStatus.FAILED
-    note.tag_error = reason[:200]
+    note.tag_status = TagStatus.DONE if note.local_only else TagStatus.FAILED
+    note.tag_error = "" if note.local_only else reason[:200]
     session.commit()
 
 
 def tag_note(session: Session, claimed: dict[str, Any]) -> None:
     note_id: UUID = claimed["id"]
+    if claimed["local_only"]:
+        complete(session, claimed, [])
+        return
     profile = _resolve_profile(session, claimed["local_only"])
     if profile is None:
         log.warning("no enabled provider; failing note %s", note_id)
@@ -168,7 +190,8 @@ def tag_note(session: Session, claimed: dict[str, Any]) -> None:
     ).all()
     # The provider also generates the title, so call it even when the tag
     # catalogue is empty. In that case the valid tag list is simply empty.
-    system_prompt = client.build_system_prompt(list(tags))
+    mode = claimed.get("generation_mode", "both")
+    system_prompt = client.build_system_prompt(list(tags), mode=mode)
     allowed = {t.slug for t in tags}
     body = client.truncate_body(claimed["body_md"], settings.tagging_max_input_chars)
 
@@ -181,6 +204,8 @@ def tag_note(session: Session, claimed: dict[str, Any]) -> None:
                 profile, system_prompt, body, settings.tagging_request_timeout
             )
             valid, _none, title = client.parse_tag_response(payload, allowed)
+            if mode == "title" and not title:
+                raise client.OutputError("Missing title")
             complete(session, claimed, valid, title)
             return
         except client.OutputError as exc:

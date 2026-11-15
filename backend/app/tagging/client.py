@@ -106,12 +106,23 @@ class TagLike(Protocol):
     description: str
 
 
-def build_system_prompt(tags: list[TagLike]) -> str:
+def build_system_prompt(tags: list[TagLike], mode: str = "both") -> str:
+    if mode == "title":
+        return """Generate only a short title for this note: at most 60 characters,
+plain text, no trailing full stop or markdown. Summarize what the note is about
+rather than repeating its first line. Use the same language as the note.
+Do not generate tags. Respond with JSON matching the required schema:
+"title": your title, "tags": [], "none_apply": true."""
     lines = []
     for t in tags:
         desc = (t.description or "").strip() or "(no description)"
         lines.append(f"- {t.slug} - {desc}")
-    return SYSTEM_PROMPT_TEMPLATE.format(tag_list="\n".join(lines) or "(no tags defined)")
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(tag_list="\n".join(lines) or "(no tags defined)")
+    if mode == "tags":
+        start = prompt.index("Also propose")
+        end = prompt.index("Hard rules:")
+        prompt = prompt[:start] + 'Do not generate a title. Return "title": "".\n\n' + prompt[end:]
+    return prompt
 
 
 IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")

@@ -119,6 +119,8 @@ class NoteOut(BaseModel):
 
 
 class NoteIn(BaseModel):
+    generate_tags: bool = True
+    generate_title: bool = True
     body_md: str
     title: str | None = None
     local_only: bool = False

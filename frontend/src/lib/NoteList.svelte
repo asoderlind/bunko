@@ -87,10 +87,8 @@
               <span class="truncate">{n.title || "(untitled)"}</span>
             </span>
             <span class="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {#if n.tag_status === "pending" || n.tag_status === "processing"}
+              {#if !n.local_only && (n.tag_status === "pending" || n.tag_status === "processing")}
                 <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">tagging…</span>
-              {:else if n.tag_status === "failed"}
-                <span class="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-300">failed</span>
               {/if}
               {#each n.tags as t (t.id)}
                 <TagPill name={t.name} color={t.color} />

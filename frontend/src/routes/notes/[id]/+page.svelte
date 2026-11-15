@@ -68,26 +68,28 @@
   const status = $derived(store.tagsState?.tag_status ?? store.note?.tag_status ?? "pending");
   const errorText = $derived(store.tagsState?.tag_error ?? store.note?.tag_error ?? "");
   const chips = $derived(store.tagsState?.tags ?? store.note?.tags ?? []);
-  const tagging = $derived(status === "pending" || status === "processing");
+  const tagging = $derived(!store.note?.local_only && (status === "pending" || status === "processing"));
   const known = $derived(new Set(chips.map((c) => c.slug)));
   const available = $derived(tags.items.filter((t) => !known.has(t.slug)));
 
-  // A tagging failure is transient UI feedback, not note content. Toast once
-  // per note visit instead of pinning the provider error under the tags. The
-  // small "tagging failed" chip and its title remain for reference.
-  let toastedFailureFor: string | null = null;
+  // Only report a failure when a job observed on this page finishes.
+  // Historical failures must not toast again on every note visit.
+  let previousJob: { id: string; status: string } | null = null;
   $effect(() => {
     const note = store.note;
     if (!note) {
-      toastedFailureFor = null;
+      previousJob = null;
       return;
     }
-    if (status === "failed" && toastedFailureFor !== note.id) {
-      toastedFailureFor = note.id;
-      showToast(errorText || "Tagging failed.", "error");
-    } else if (status !== "failed") {
-      toastedFailureFor = null;
+    if (!note.local_only && previousJob?.id === note.id &&
+        (previousJob.status === "pending" || previousJob.status === "processing")) {
+      if (status === "failed") {
+        showToast(errorText || "Generation failed.", "error");
+      } else if (status === "done") {
+        showToast("Generation completed.");
+      }
     }
+    previousJob = { id: note.id, status };
   });
 
   /** Mirror a tag response into the note view and every cached copy of it. */
@@ -245,10 +247,6 @@
               {#if tagging}
                 <span class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                   <Loader2 class="h-3 w-3 animate-spin" /> tagging…
-                </span>
-              {:else if status === "failed"}
-                <span class="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-300" title={errorText}>
-                  tagging failed
                 </span>
               {/if}
 

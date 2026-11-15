@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.1.0
+
+### Added
+
+- Import one or more Markdown notes from Settings, with independent title and tag generation options.
+- Read YAML front matter on import, prioritizing titles, dates, tags, folder paths, and privacy over generation options.
+- Export collections as ZIP archives containing one Markdown file per note with portable metadata.
+- Import collection ZIPs transactionally without AI generation, preserving metadata and leaving existing notes intact.
+- Validate collection archives and limit compressed size, expanded size, entry count, and individual note size.
+
+### Changed
+
+- Group Generate title and Generate tags below Move to in the note menu and simplify provider-related labels.
+- Keep title generation and tag generation independent.
+- Make private notes manual-only and hide their generation actions.
+- Use the same metadata format for individual note downloads and collection exports.
+- Show generation results as temporary toasts instead of persistent failure badges or repeated warnings on reopening notes.
+
+### Fixed
+
+- Preserve existing tags when generating a title and preserve titles when generating tags.
+- Cancel legacy private-note generation jobs and clear their stale failure state.
+- Preserve supplied timestamps in UTC during import.
+
+### Upgrade notes
+
+- Includes database migrations for generation modes and private-note queue cleanup.
+- Collection imports add notes; importing the same collection again creates duplicates.
+- Collection exports include private notes as plain text, but exclude attachments, provider settings, and empty folders. Back up the persistent data directory for a complete backup.
+
 ## 0.0.4
 
 ### Added

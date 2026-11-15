@@ -136,7 +136,7 @@ built for `linux/amd64`.
 To pull the image from the homelab:
 
 ```bash
-docker pull ghcr.io/<owner>/bunko:0.0.4
+docker pull ghcr.io/<owner>/bunko:0.1.0
 ```
 
 The published package is private by default. For credential-free pulls, open the
@@ -162,19 +162,19 @@ major for breaking changes. Keep upcoming changes under `## Unreleased` in
 `changelog.md`. Before releasing, move them into a new `## MAJOR.MINOR.PATCH`
 section (optionally followed by ` — YYYY-MM-DD`). Never reuse a published tag.
 
-For the next prepared release, **0.0.4**, review and commit the release
+For the next prepared release, **0.1.0**, review and commit the release
 changes, ensure CI passes, then run from this repository:
 
 ```bash
 python3 -m unittest discover -s scripts -p 'test_*.py'
-python3 scripts/release_notes.py v0.0.4
+python3 scripts/release_notes.py v0.1.0
 git push origin main
-git tag -a v0.0.4 -m "Release 0.0.4"
-git push origin v0.0.4
+git tag -a v0.1.0 -m "Release 0.1.0"
+git push origin v0.1.0
 ```
 
 The publish workflow rejects malformed tags and missing, empty, or duplicate
-changelog sections. It publishes `ghcr.io/asoderlind/bunko:0.0.4`
+changelog sections. It publishes `ghcr.io/asoderlind/bunko:0.1.0`
 and then creates a GitHub release containing only that version's notes.
 Only stable `vMAJOR.MINOR.PATCH` tags are supported by this release procedure.
 Branch, SHA, `latest`, and major/minor image aliases are moving tags; use the
@@ -186,7 +186,7 @@ Wait for the tag's publish workflow and GitHub release to succeed. Only then
 edit `homelab/hosts/dell/services/bunko.nix` to use:
 
 ```nix
-image = "ghcr.io/asoderlind/bunko:0.0.4";
+image = "ghcr.io/asoderlind/bunko:0.1.0";
 ```
 
 Commit the HomeLab change and run your normal Dell NixOS rebuild/deployment.

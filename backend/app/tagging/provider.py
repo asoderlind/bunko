@@ -11,13 +11,8 @@ from app.models import ProviderProfile
 def resolve_provider(session: Session, local_only: bool) -> ProviderProfile | None:
     """Select the configured provider, respecting private-note restrictions."""
     if local_only:
-        # A remote default must never block a private note from using an
-        # otherwise available local provider.
-        return session.scalars(
-            select(ProviderProfile)
-            .where(ProviderProfile.enabled.is_(True), ProviderProfile.is_local.is_(True))
-            .order_by(ProviderProfile.is_default.desc(), ProviderProfile.label)
-        ).first()
+        # Private notes are manual-only, even when a local provider exists.
+        return None
 
     provider = session.scalars(
         select(ProviderProfile).where(

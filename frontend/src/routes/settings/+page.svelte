@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { KeyRound, Loader2, Pencil, Save, X } from "lucide-svelte";
   import { api, type Provider } from "$lib/api";
+  import ImportNotes from "$lib/ImportNotes.svelte";
   import { providers as providerStore } from "$lib/stores.svelte";
 
   let providers = $state<Provider[]>([]);
@@ -92,7 +93,9 @@
 
 <div class="mx-auto w-full max-w-3xl px-4 pb-5 pt-14 md:py-5">
   <h1 class="mb-1 text-xl font-semibold tracking-tight">Settings</h1>
-  <p class="mb-5 text-sm text-muted-foreground">Configure the AI provider used for automatic titles and tags.</p>
+  <p class="mb-5 text-sm text-muted-foreground">Import notes and configure automatic titles and tags.</p>
+
+  <ImportNotes />
 
   <section bind:this={providerForm} class="scroll-mt-16 space-y-4 rounded-xl border bg-card p-4">
     <div class="flex items-start gap-3">

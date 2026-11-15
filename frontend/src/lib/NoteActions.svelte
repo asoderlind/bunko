@@ -51,7 +51,7 @@
   const configuredProvider = $derived(providers.selected);
   const selectedProvider = $derived(providers.forNote(note.local_only));
   const canRetag = $derived(
-    !!selectedProvider && (!note.local_only || selectedProvider.is_local)
+    !!selectedProvider && !note.local_only
   );
 
   const itemClass =
@@ -196,23 +196,6 @@
           {privacyChanging ? "Updating privacy…" : note.local_only ? "Make non-private" : "Make private"}
         </DropdownMenu.Item>
 
-        <DropdownMenu.Item
-          class={cn(itemClass, "disabled:pointer-events-none disabled:opacity-50")}
-          onSelect={() => void generateTitle()}
-          disabled={!canRetag || retagging || generatingTitle}
-        >
-          <Pencil class={cn("h-4 w-4", generatingTitle && "animate-pulse")} />
-          {#if generatingTitle}
-            Generating title…
-          {:else if !configuredProvider}
-            Generate title (configure a provider first)
-          {:else if !canRetag}
-            Generate title (local provider required)
-          {:else}
-            Generate title with {selectedProvider?.label ?? "provider"}
-          {/if}
-        </DropdownMenu.Item>
-
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger class={cn(itemClass, "justify-between")}>
             <span class="flex items-center gap-2">
@@ -252,7 +235,25 @@
           </DropdownMenu.Portal>
         </DropdownMenu.Sub>
 
+        {#if !note.local_only}
         <DropdownMenu.Separator class="-mx-1 my-1 h-px bg-border" />
+
+        <DropdownMenu.Item
+          class={cn(itemClass, "disabled:pointer-events-none disabled:opacity-50")}
+          onSelect={() => void generateTitle()}
+          disabled={!canRetag || retagging || generatingTitle}
+        >
+          <Pencil class={cn("h-4 w-4", generatingTitle && "animate-pulse")} />
+          {#if generatingTitle}
+            Generating title…
+          {:else if !configuredProvider}
+            Generate title (configure a provider first)
+          {:else if !canRetag}
+            Generate title
+          {:else}
+            Generate title with {selectedProvider?.label ?? "provider"}
+          {/if}
+        </DropdownMenu.Item>
 
         <DropdownMenu.Item
           class={cn(itemClass, "disabled:pointer-events-none disabled:opacity-50")}
@@ -261,15 +262,17 @@
         >
           <RefreshCw class={cn("h-4 w-4", retagging && "animate-spin")} />
           {#if retagging}
-            Re-tagging…
+            Generating tags…
           {:else if !configuredProvider}
-            Re-tag (configure a provider first)
+            Generate tags (configure a provider first)
           {:else if !canRetag}
-            Re-tag (local provider required)
+            Generate tags
           {:else}
-            Re-tag with {selectedProvider?.label ?? "provider"}
+            Generate tags with {selectedProvider?.label ?? "provider"}
           {/if}
         </DropdownMenu.Item>
+
+        {/if}
 
         <DropdownMenu.Separator class="-mx-1 my-1 h-px bg-border" />
 

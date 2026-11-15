@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import uuid
+from io import BytesIO
 from typing import Annotated, Any
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+import yaml
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import current_user
+from app.collection_io import MAX_ARCHIVE_BYTES, import_collection
 from app.db import get_session
+from app.markdown_io import export_markdown, import_markdown
 from app.models import AppUser, Note, NoteTag, Tag, TagSource, TagStatus, TitleSource
-from app.tagging.provider import resolve_provider
 from app.schemas import (
     NoteIn,
     NoteOut,
@@ -22,6 +26,7 @@ from app.schemas import (
     TagPinIn,
     TagsResponse,
 )
+from app.tagging.provider import resolve_provider
 
 router = APIRouter(prefix="/notes", tags=["notes"], redirect_slashes=True)
 # Accept both /api/notes and /api/notes/ : the SPA uses the trailing form.
@@ -162,9 +167,15 @@ def create_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut
         body_md=payload.body_md,
         local_only=payload.local_only,
         folder_id=payload.folder_id,
+        generation_mode=(
+            "both" if payload.generate_tags and payload.generate_title
+            else "title" if payload.generate_title
+            else "tags"
+        ),
         tag_status=(
             TagStatus.PENDING
-            if resolve_provider(session, payload.local_only) is not None
+            if (payload.generate_tags or payload.generate_title)
+            and resolve_provider(session, payload.local_only) is not None
             else TagStatus.DONE
         ),
     )
@@ -226,6 +237,62 @@ def notes_tree(
     )
 
 
+@router.get("/export")
+def export_notes(session: SessionDep, _user: UserDep) -> Response:
+    """One Markdown file per note, including private notes."""
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        for note in session.scalars(select(Note).order_by(Note.created_at)):
+            # UUID filenames are unique and cannot introduce archive paths.
+            archive.writestr(f"{note.id}.md", export_markdown(note))
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": 'attachment; filename="bunko-collection.zip"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/import-collection")
+def import_notes_collection(
+    file: UploadFile, session: SessionDep, _user: UserDep,
+) -> dict[str, int]:
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose a .zip collection file.")
+    content = file.file.read(MAX_ARCHIVE_BYTES + 1)
+    try:
+        count = import_collection(session, content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"imported": count}
+
+
+@router.post("/import", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
+def import_note(payload: NoteIn, session: SessionDep, _user: UserDep) -> NoteOut:
+    try:
+        note = import_markdown(
+            session, payload.body_md, payload.generate_tags, payload.generate_title,
+        )
+    except (ValueError, yaml.YAMLError) as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return _note_out(_load(session, note.id))
+
+
+@router.get("/{note_id}/export")
+def export_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> Response:
+    return Response(
+        export_markdown(_load(session, note_id)),
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{note_id}.md"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/{note_id}", response_model=NoteOut)
 def get_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteOut:
     return _note_out(_load(session, note_id))
@@ -243,6 +310,8 @@ def retag_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteO
         )
 
     _clear_automatic_tags(session, note)
+    note.content_revision += 1
+    note.generation_mode = "tags"
     note.tag_status = TagStatus.PENDING
     note.tag_error = ""
     session.commit()
@@ -251,7 +320,7 @@ def retag_note(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteO
 
 @router.post("/{note_id}/generate-title", response_model=NoteOut)
 def generate_title(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> NoteOut:
-    """Allow a user title to be handed back to the automatic title generator."""
+    """Queue title generation without changing existing tags."""
     note = _load(session, note_id)
     if resolve_provider(session, note.local_only) is None:
         raise HTTPException(
@@ -259,10 +328,8 @@ def generate_title(note_id: uuid.UUID, session: SessionDep, _user: UserDep) -> N
             "No enabled compatible provider configured.",
         )
 
-    note.title = note.derive_title()
-    note.title_source = TitleSource.DERIVED
     note.content_revision += 1
-    _clear_automatic_tags(session, note)
+    note.generation_mode = "title"
     note.tag_status = TagStatus.PENDING
     note.tag_error = ""
     session.commit()
@@ -296,7 +363,7 @@ def update_note(
             # Cleared on purpose: hand the title back to the generator.
             note.title = note.derive_title()
             note.title_source = TitleSource.DERIVED
-    elif body_changed and note.title_source != TitleSource.USER:
+    elif body_changed and not note.local_only and note.title_source != TitleSource.USER:
         note.title = note.derive_title()
         note.title_source = TitleSource.DERIVED
 
@@ -309,6 +376,7 @@ def update_note(
         # worker discards results for revisions edited in the meantime.
         if resolve_provider(session, note.local_only) is not None:
             _clear_automatic_tags(session, note)
+            note.generation_mode = "both"
             note.tag_status = TagStatus.PENDING
             note.tag_error = ""
         elif note.tag_status in (TagStatus.PENDING, TagStatus.PROCESSING):
@@ -324,6 +392,10 @@ def update_note(
         elif note.tag_status in (TagStatus.PENDING, TagStatus.PROCESSING):
             note.tag_status = TagStatus.DONE
             note.tag_error = ""
+
+    if note.local_only:
+        note.tag_status = TagStatus.DONE
+        note.tag_error = ""
 
     session.commit()
     return _note_out(_load(session, note.id))
